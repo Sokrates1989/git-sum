@@ -14,6 +14,19 @@ run_first_time_setup() {
     echo "keep them all up to date. Let's add some folders to watch."
     echo ""
     
+    # Check for updates first
+    local update_available=false
+    if git fetch --quiet origin 2>/dev/null; then
+        if ! git diff --quiet HEAD..origin/HEAD 2>/dev/null; then
+            update_available=true
+        fi
+    fi 2>/dev/null || true
+    
+    if [[ "$update_available" == true ]]; then
+        echo "[i] Update available! Run 'git-sum -u' to update after setup."
+        echo ""
+    fi
+    
     # Add folders
     if ! run_add_folders; then
         echo ""

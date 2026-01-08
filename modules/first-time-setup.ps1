@@ -21,6 +21,25 @@ function Invoke-FirstTimeSetup {
     Write-Host "keep them all up to date. Let's add some folders to watch."
     Write-Host ""
     
+    # Check for updates first
+    $updateAvailable = $false
+    try {
+        $null = Run-GitCommand -Arguments "fetch", "--quiet", "origin" -TimeoutSeconds 10 -WorkingDirectory $RootDir
+        if ($LASTEXITCODE -eq 0) {
+            $null = Run-GitCommand -Arguments "diff", "--quiet", "HEAD..origin/HEAD" -TimeoutSeconds 10 -WorkingDirectory $RootDir
+            if ($LASTEXITCODE -eq 1) {
+                $updateAvailable = $true
+            }
+        }
+    } catch {
+        # Ignore update check failures
+    }
+    
+    if ($updateAvailable) {
+        Write-Host "[i] Update available! Run 'git-sum -u' to update after setup." -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
     # Add folders
     $foldersAdded = Invoke-AddFolders
     
