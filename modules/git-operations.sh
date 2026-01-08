@@ -77,14 +77,15 @@ get_repo_status() {
     REPO_BRANCHES[$index]="$current_branch"
     
     # Check for uncommitted changes
-    local status has_changes=false has_untracked=false
+    local status has_changes=false has_untracked=false has_only_submodule_changes=false
     status=$(run_git_command status --porcelain 2>/dev/null)
     if [[ -n "$status" ]]; then
-        if echo "$status" | grep -q "^[MADRC]"; then
+        # Check if all changes are submodule changes
+        if echo "$status" | grep -v "^M " | grep -v "^??" | grep -q .; then
             has_changes=true
-        fi
-        if echo "$status" | grep -q "^.[MADRC]"; then
-            has_changes=true
+        else
+            # Only submodule changes detected
+            has_only_submodule_changes=true
         fi
         if echo "$status" | grep -q "^??"; then
             has_untracked=true
@@ -127,8 +128,8 @@ get_repo_status() {
         REPO_MESSAGES[$index]="No remote configured"
     fi
     
-    # Check for submodule updates (only if repo is otherwise clean)
-    if [[ "$has_changes" == false && "$any_diverged" -eq 0 ]]; then
+    # Check for submodule updates (even if only submodule changes exist)
+    if [[ "$any_diverged" -eq 0 ]]; then
         check_submodules "$repo_path" "$index"
         # If submodules have updates, that becomes the primary status
         if [[ "${REPO_STATUSES[$index]}" == "submodule_updates" ]]; then
@@ -142,6 +143,18 @@ get_repo_status() {
         REPO_STATUSES[$index]="dirty"
         REPO_MESSAGES[$index]="Has uncommitted changes"
         REPO_CAN_PULL[$index]="false"
+    elif [[ "$has_only_submodule_changes" == true ]]; then
+        # Repository is only dirty due to submodule changes - treat as submodule updates
+        check_submodules "$repo_path" "$index"
+        if [[ "${REPO_STATUSES[$index]}" == "submodule_updates" ]]; then
+            REPO_CAN_PULL[$index]="true"  # Allow pulling to update submodules
+            return 0
+        else
+            # Submodule changes but no updates available
+            REPO_STATUSES[$index]="dirty"
+            REPO_MESSAGES[$index]="Has submodule changes"
+            REPO_CAN_PULL[$index]="false"
+        fi
     elif [[ "$any_diverged" -gt 0 ]]; then
         REPO_STATUSES[$index]="diverged"
         REPO_MESSAGES[$index]="Some branches diverged"

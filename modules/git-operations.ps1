@@ -164,13 +164,19 @@ function Get-RepoStatus {
         
         # Check for uncommitted changes
         $statusLines = Run-GitCommand -Arguments "status", "--porcelain" -WorkingDirectory $RepoPath
+        $hasOnlySubmoduleChanges = $false
         if ($statusLines) {
             $staged = $statusLines | Where-Object { $_ -match "^[MADRC]" }
             $unstaged = $statusLines | Where-Object { $_ -match "^.[MADRC]" }
             $untracked = $statusLines | Where-Object { $_ -match "^\?\?" }
+            $submoduleChanges = $statusLines | Where-Object { $_ -match "^M " }
             
-            if ($staged -or $unstaged) {
+            # Check if all changes are submodule changes
+            $nonSubmoduleChanges = $statusLines | Where-Object { $_ -notmatch "^M " -and $_ -notmatch "^\?\?" }
+            if ($nonSubmoduleChanges) {
                 $result.hasUncommittedChanges = $true
+            } elseif ($submoduleChanges) {
+                $hasOnlySubmoduleChanges = $true
             }
             if ($untracked) {
                 $result.hasUntrackedFiles = $true
@@ -230,8 +236,8 @@ function Get-RepoStatus {
             }
         }
         
-        # Check for submodule updates (only if repo is otherwise clean)
-        if (-not ($result.hasUncommittedChanges -or $result.hasUntrackedFiles) -and -not $anyDiverged) {
+        # Check for submodule updates (even if only submodule changes exist)
+        if (-not $anyDiverged) {
             $submoduleCheck = Test-SubmoduleUpdates -RepoPath $RepoPath
             if ($submoduleCheck.hasUpdates) {
                 $result.status = "submodule_updates"
@@ -251,6 +257,19 @@ function Get-RepoStatus {
                 $result.message = "Has uncommitted changes"
             } else {
                 $result.message = "Has untracked files"
+            }
+        } elseif ($hasOnlySubmoduleChanges) {
+            # Repository is only dirty due to submodule changes - treat as submodule updates
+            $submoduleCheck = Test-SubmoduleUpdates -RepoPath $RepoPath
+            if ($submoduleCheck.hasUpdates) {
+                $result.status = "submodule_updates"
+                $result.message = "Submodules have updates available"
+                $result.canPull = $true
+                return $result
+            } else {
+                # Submodule changes but no updates available
+                $result.status = "dirty"
+                $result.message = "Has submodule changes"
             }
         } else {
             # Evaluate all branches
