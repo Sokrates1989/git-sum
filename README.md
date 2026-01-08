@@ -57,21 +57,41 @@ rm -rf /tmp/git-sum-setup
 
 ### 🪟 Windows
 
-**Option 1: Single line (copy and paste as one command):**
-```powershell
-powershell -Command "& {$OriginalDir = Get-Location; $TempDir = \"$env:TEMP\git-sum-setup\"; New-Item -ItemType Directory -Path $TempDir -Force | Out-Null; Set-Location $TempDir; Invoke-WebRequest -Uri \"https://raw.githubusercontent.com/Sokrates1989/git-sum/main/setup/windows.ps1\" -OutFile \"windows.ps1\"; Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; .\windows.ps1; Set-Location $OriginalDir; Remove-Item -Recurse -Force $TempDir}"
-```
+Copy and run each command separately in PowerShell (as Administrator for best results):
 
-**Option 2: Step by step (run each line separately):**
 ```powershell
 $OriginalDir = Get-Location
+```
+
+```powershell
 $TempDir = "$env:TEMP\git-sum-setup"
+```
+
+```powershell
 New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
+```
+
+```powershell
 Set-Location $TempDir
+```
+
+```powershell
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Sokrates1989/git-sum/main/setup/windows.ps1" -OutFile "windows.ps1"
+```
+
+```powershell
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+```
+
+```powershell
 .\windows.ps1
+```
+
+```powershell
 Set-Location $OriginalDir
+```
+
+```powershell
 Remove-Item -Recurse -Force $TempDir
 ```
 
