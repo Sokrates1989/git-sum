@@ -1,6 +1,9 @@
 # Configuration (user-specific)
 config/watched-folders.json
 
+# Installation artifacts
+git-sum.cmd
+
 # Logs
 *.log
 
