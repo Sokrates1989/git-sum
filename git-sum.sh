@@ -151,6 +151,14 @@ done
 # === Ensure config directory exists ===
 mkdir -p "${CONFIG_DIR}"
 
+# === Check for updates (non-intrusive) ===
+UPDATE_AVAILABLE=false
+if git fetch --quiet origin 2>/dev/null; then
+    if ! git diff --quiet HEAD..origin/HEAD 2>/dev/null; then
+        UPDATE_AVAILABLE=true
+    fi
+fi 2>/dev/null || true
+
 # === Main logic ===
 case "$MODE" in
     update)
@@ -180,6 +188,12 @@ case "$MODE" in
         echo ""
         echo "[*] git-sum - Scanning repositories..."
         echo "======================================"
+        
+        # Show update notification if available
+        if [[ "$UPDATE_AVAILABLE" == true ]]; then
+            echo "[i] Update available! Run 'git-sum -u' to update."
+            echo ""
+        fi
         
         if [[ "$DRY_RUN" == true ]]; then
             echo "   (Dry run mode - no changes will be made)"
