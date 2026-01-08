@@ -75,6 +75,48 @@ function Run-GitCommand {
     }
 }
 
+function Set-RepoStatusField {
+    <#
+    .SYNOPSIS
+        Sets a field on a repo status object safely.
+
+    .DESCRIPTION
+        Repo status objects are expected to be hashtables, but in some environments
+        or call paths they may become PSCustomObjects. This helper ensures fields
+        can be added/updated without throwing PropertyAssignmentException.
+
+    .PARAMETER Status
+        The repo status object (hashtable or PSCustomObject).
+
+    .PARAMETER Name
+        The field name to set.
+
+    .PARAMETER Value
+        The value to assign.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [object]$Status,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter()]
+        [object]$Value
+    )
+
+    if ($Status -is [System.Collections.IDictionary]) {
+        $Status[$Name] = $Value
+        return
+    }
+
+    if ($null -eq $Status) {
+        return
+    }
+
+    $Status | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+}
+
 function Get-RepoStatus {
     <#
     .SYNOPSIS
@@ -111,7 +153,6 @@ function Get-RepoStatus {
         if ($LASTEXITCODE -ne 0) {
             $result.status = "not_git"
             $result.message = "Not a git repository"
-            Pop-Location
             return $result
         }
         
@@ -141,32 +182,49 @@ function Get-RepoStatus {
         $result.hasRemote = [bool]$remotes
         
         if ($result.hasRemote) {
-            # Fetch to check for updates (quiet, non-interactive)
-            Run-GitCommand -Arguments "fetch", "--all", "--quiet" -WorkingDirectory $RepoPath
-            
-            # Get all local branches and their status relative to upstream
-            $branchList = Run-GitCommand -Arguments "branch", "--format=%(refname:short)|%(upstream:short)" -WorkingDirectory $RepoPath
-            foreach ($line in $branchList) {
-                if ($line -match "^(.+)\|(.+)$") {
-                    $branchName = $matches[1]
-                    $upstream = $matches[2]
-                    
-                    if ($upstream) {
-                        $aheadStr = (Run-GitCommand -Arguments "rev-list", "--count", "$upstream..$branchName" -WorkingDirectory $RepoPath)[0].ToString()
-                        $behindStr = (Run-GitCommand -Arguments "rev-list", "--count", "$branchName..$upstream" -WorkingDirectory $RepoPath)[0].ToString()
+            # Only fetch/compute branch tracking status when the working tree is clean.
+            # If a repo is dirty, we won't pull anyway, and fetching may trigger auth prompts.
+            if (-not ($result.hasUncommittedChanges -or $result.hasUntrackedFiles)) {
+                # Fetch to check for updates (quiet, non-interactive)
+                $fetchLines = Run-GitCommand -Arguments "fetch", "--all", "--quiet" -WorkingDirectory $RepoPath
+                if ($LASTEXITCODE -ne 0) {
+                    $fetchMessage = ($fetchLines | Select-Object -First 1)
+                    if (-not $fetchMessage) {
+                        $fetchMessage = "Git fetch failed"
+                    }
+                    $result.status = "error"
+                    if ($fetchMessage -match "(?i)(user cancelled dialog|authentication failed|could not read username|terminal prompts disabled|credential|authorization)") {
+                        $result.message = "Authentication required. Run: cd `"$RepoPath`" && git fetch"
+                    } else {
+                        $result.message = "Fetch failed: $fetchMessage"
+                    }
+                    return $result
+                }
+                
+                # Get all local branches and their status relative to upstream
+                $branchList = Run-GitCommand -Arguments "branch", "--format=%(refname:short)|%(upstream:short)" -WorkingDirectory $RepoPath
+                foreach ($line in $branchList) {
+                    if ($line -match "^(.+)\|(.+)$") {
+                        $branchName = $matches[1]
+                        $upstream = $matches[2]
                         
-                        $ahead = 0
-                        $behind = 0
-                        if ($aheadStr -match "^\d+$") { $ahead = [int]$aheadStr }
-                        if ($behindStr -match "^\d+$") { $behind = [int]$behindStr }
-                        
-                        $branchStatus = @{
-                            name = $branchName
-                            upstream = $upstream
-                            ahead = $ahead
-                            behind = $behind
+                        if ($upstream) {
+                            $aheadStr = (Run-GitCommand -Arguments "rev-list", "--count", "$upstream..$branchName" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
+                            $behindStr = (Run-GitCommand -Arguments "rev-list", "--count", "$branchName..$upstream" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
+                            
+                            $ahead = 0
+                            $behind = 0
+                            if ($aheadStr -match "^\d+$") { $ahead = [int]$aheadStr }
+                            if ($behindStr -match "^\d+$") { $behind = [int]$behindStr }
+                            
+                            $branchStatus = @{
+                                name = $branchName
+                                upstream = $upstream
+                                ahead = $ahead
+                                behind = $behind
+                            }
+                            $result.branches += $branchStatus
                         }
-                        $result.branches += $branchStatus
                     }
                 }
             }
@@ -176,9 +234,13 @@ function Get-RepoStatus {
         if (-not $result.hasRemote) {
             $result.status = "no_remote"
             $result.message = "No remote configured"
-        } elseif ($result.hasUncommittedChanges) {
+        } elseif ($result.hasUncommittedChanges -or $result.hasUntrackedFiles) {
             $result.status = "dirty"
-            $result.message = "Has uncommitted changes"
+            if ($result.hasUncommittedChanges) {
+                $result.message = "Has uncommitted changes"
+            } else {
+                $result.message = "Has untracked files"
+            }
         } else {
             # Evaluate all branches
             $anyBehind = $result.branches | Where-Object { $_.behind -gt 0 }
@@ -256,7 +318,7 @@ function Invoke-PullAllBranches {
     
     Push-Location $RepoPath
     try {
-        $originalBranch = (Run-GitCommand -Arguments "rev-parse", "--abbrev-ref", "HEAD" -WorkingDirectory $RepoPath)[0].ToString()
+        $originalBranch = (Run-GitCommand -Arguments "rev-parse", "--abbrev-ref", "HEAD" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
         $branchInfo = Run-GitCommand -Arguments "branch", "--format=%(refname:short)|%(upstream:short)" -WorkingDirectory $RepoPath
         
         foreach ($line in $branchInfo) {
@@ -279,7 +341,11 @@ function Invoke-PullAllBranches {
                 }
                 
                 # Check behind count
-                $behind = [int](Run-GitCommand -Arguments "rev-list", "--count", "$branch..$upstream" -WorkingDirectory $RepoPath)[0].ToString()
+                $behindStr = (Run-GitCommand -Arguments "rev-list", "--count", "$branch..$upstream" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
+                $behind = 0
+                if ($behindStr -match "^\d+$") {
+                    $behind = [int]$behindStr
+                }
                 if ($behind -eq 0) {
                     $branchResult.success = $true
                     $branchResult.message = "Already up to date"
@@ -322,7 +388,7 @@ function Invoke-PullAllBranches {
         }
         
         # Return to original branch if we moved
-        $currentBranch = (Run-GitCommand -Arguments "rev-parse", "--abbrev-ref", "HEAD" -WorkingDirectory $RepoPath)[0].ToString()
+        $currentBranch = (Run-GitCommand -Arguments "rev-parse", "--abbrev-ref", "HEAD" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
         if ($currentBranch -ne $originalBranch) {
             Run-GitCommand -Arguments "checkout", "$originalBranch", "--quiet" -WorkingDirectory $RepoPath
         }
@@ -383,6 +449,7 @@ function Invoke-RepoScan {
                 "diverged" { Write-Host " [!]" -ForegroundColor Red }
                 "dirty" { Write-Host " [~]" -ForegroundColor Magenta }
                 "no_remote" { Write-Host " [-]" -ForegroundColor Gray }
+                "error" { Write-Host " [X]" -ForegroundColor Red }
                 default { Write-Host " [?]" -ForegroundColor Gray }
             }
             
@@ -391,19 +458,19 @@ function Invoke-RepoScan {
                 Write-Host "      [v] Pulling..." -ForegroundColor Yellow -NoNewline
                 try {
                     $pullResult = Invoke-SafePull -RepoPath $repoPath
-                    $status.pullResult = $pullResult
+                    Set-RepoStatusField -Status $status -Name "pullResult" -Value $pullResult
                     
                     if ($pullResult.success) {
                         Write-Host " $($pullResult.message)" -ForegroundColor Green
-                        $status.status = "pulled"
-                        $status.message = $pullResult.message
+                        Set-RepoStatusField -Status $status -Name "status" -Value "pulled"
+                        Set-RepoStatusField -Status $status -Name "message" -Value $pullResult.message
                     } else {
                         Write-Host " Failed" -ForegroundColor Red
                     }
                 } catch {
                     $errorMessage = $_.Exception.Message
                     Write-Host " Failed" -ForegroundColor Red
-                    $status.pullResult = @{
+                    Set-RepoStatusField -Status $status -Name "pullResult" -Value @{
                         success = $false
                         message = "Pull failed: $errorMessage"
                     }

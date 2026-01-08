@@ -131,14 +131,14 @@ function Invoke-Update {
         $statusLines = Run-GitCommand -Arguments "status", "--porcelain" -WorkingDirectory $RootDir
         if ($statusLines) {
             Write-Host "[!] Local changes detected. Please commit or stash them first." -ForegroundColor Yellow
-            Pop-Location
             return
         }
         
         Run-GitCommand -Arguments "fetch", "origin" -WorkingDirectory $RootDir
-        $behindLines = Run-GitCommand -Arguments "rev-list", "HEAD..origin/main", "--count" -WorkingDirectory $RootDir
+        $behindLines = Run-GitCommand -Arguments "rev-list", "--count", "HEAD..origin/main" -WorkingDirectory $RootDir
         $behind = 0
-        if ($behindLines -and $behindLines[0].ToString() -match "^\d+$") { $behind = [int]$behindLines[0] }
+        $behindStr = ($behindLines | Select-Object -First 1)
+        if ($behindStr -and $behindStr.ToString().Trim() -match "^\d+$") { $behind = [int]$behindStr }
         
         if ($behind -gt 0) {
             Write-Host "[>] Updating git-sum ($($behind) commits behind)..." -ForegroundColor Yellow
@@ -173,16 +173,15 @@ if ($Update) {
 # Check for updates (non-intrusive)
 $updateAvailable = $false
 try {
-    Push-Location $RootDir
-    git fetch --quiet 2>$null
-    $diff = git diff HEAD..origin/HEAD --quiet 2>$null
-    if ($LASTEXITCODE -eq 1) {
-        $updateAvailable = $true
+    $null = Run-GitCommand -Arguments "fetch", "--quiet", "origin" -TimeoutSeconds 10 -WorkingDirectory $RootDir
+    if ($LASTEXITCODE -eq 0) {
+        $null = Run-GitCommand -Arguments "diff", "--quiet", "HEAD..origin/HEAD" -TimeoutSeconds 10 -WorkingDirectory $RootDir
+        if ($LASTEXITCODE -eq 1) {
+            $updateAvailable = $true
+        }
     }
-    Pop-Location
 } catch {
     # Ignore update check failures
-    Pop-Location -ErrorAction SilentlyContinue
 }
 
 # Ensure config directory exists
