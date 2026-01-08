@@ -153,6 +153,7 @@ mkdir -p "${CONFIG_DIR}"
 
 # === Check for updates (non-intrusive) ===
 UPDATE_AVAILABLE=false
+cd "${ROOT_DIR}"
 if git fetch --quiet origin 2>/dev/null; then
     if ! git diff --quiet HEAD..origin/HEAD 2>/dev/null; then
         UPDATE_AVAILABLE=true
