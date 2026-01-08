@@ -190,14 +190,12 @@ if (-not $Update.IsPresent) {
         Write-Host ""
         Write-Host "[*] git-sum - Git Repository Status Summary" -ForegroundColor Cyan
         Write-Host "================================================" -ForegroundColor Cyan
-        Write-Host ""
-        Write-Host "[w] Update available! Run 'git-sum -u' to update." -ForegroundColor Yellow
+        Write-Host "[W] Update available! Run 'git-sum -u' to update." -ForegroundColor Yellow
         Write-Host ""
     } else {
         Write-Host ""
         Write-Host "[*] git-sum - Git Repository Status Summary" -ForegroundColor Cyan
         Write-Host "================================================" -ForegroundColor Cyan
-        Write-Host ""
         Write-Host "[i] git-sum is up to date." -ForegroundColor Green
         Write-Host ""
     }

@@ -166,14 +166,12 @@ if [[ "$MODE" != "update" ]]; then
         echo ""
         echo "[*] git-sum - Git Repository Status Summary"
         echo "================================================"
-        echo ""
         echo "⬆️  Update available! Run 'git-sum -u' to update."
         echo ""
     else
         echo ""
         echo "[*] git-sum - Git Repository Status Summary"
         echo "================================================"
-        echo ""
         echo "✅ git-sum is up to date."
         echo ""
     fi
