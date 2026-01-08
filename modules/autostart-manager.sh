@@ -161,7 +161,7 @@ run_autostart_config() {
     
     read -p "Choose option: " choice
     
-    case "${choice,,}" in
+    case "$(echo "$choice" | tr '[:upper:]' '[:lower:]')" in
         1)
             if [[ "$is_installed" == "true" ]]; then
                 set_autostart "false"
