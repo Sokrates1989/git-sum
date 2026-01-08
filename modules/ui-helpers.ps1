@@ -121,6 +121,8 @@ function Show-RepoAttention {
         [switch]$DryRun
     )
     
+    $hasBranchIssues = $false
+    
     $icon = switch ($Repo.status) {
         "behind" { "[v]" }
         "ahead" { "[^]" }
@@ -143,30 +145,41 @@ function Show-RepoAttention {
         Write-Host "      Error:  $($Repo.message)" -ForegroundColor Red
     } else {
         # Show status for all branches that need attention
-        $problemBranch = ""
+        $hasBranchIssues = $false
         foreach ($branch in $Repo.branches) {
             if ($branch.ahead -gt 0 -and $branch.behind -gt 0) {
                 Write-Host "      Branch $($branch.name): Diverged ($($branch.ahead) ahead, $($branch.behind) behind)" -ForegroundColor Red
-                $problemBranch = $branch.name
+                $hasBranchIssues = $true
             } elseif ($branch.ahead -gt 0) {
                 Write-Host "      Branch $($branch.name): $($branch.ahead) commits ahead" -ForegroundColor Blue
-                $problemBranch = $branch.name
+                $hasBranchIssues = $true
             } elseif ($branch.behind -gt 0) {
                 Write-Host "      Branch $($branch.name): $($branch.behind) commits behind" -ForegroundColor Yellow
-                $problemBranch = $branch.name
+                $hasBranchIssues = $true
             }
         }
         
-        # Show branch checkout note if needed
-        if ($problemBranch -and $problemBranch -ne $Repo.currentBranch) {
-            Write-Host "      Note: Switch to branch '$problemBranch' first: cd `"$($Repo.path)`" && git checkout $problemBranch" -ForegroundColor DarkGray
+        # Create branch-specific commands
+        if ($hasBranchIssues) {
+            Write-Host "      [>] Run individual branches:" -ForegroundColor Cyan
+            foreach ($branch in $Repo.branches) {
+                if ($branch.ahead -gt 0 -and $branch.behind -gt 0) {
+                    Write-Host "         cd `"$($Repo.path)`" && git checkout $($branch.name) && git status" -ForegroundColor DarkGray
+                } elseif ($branch.ahead -gt 0) {
+                    Write-Host "         cd `"$($Repo.path)`" && git checkout $($branch.name) && git push" -ForegroundColor DarkGray
+                } elseif ($branch.behind -gt 0) {
+                    Write-Host "         cd `"$($Repo.path)`" && git checkout $($branch.name) && git pull" -ForegroundColor DarkGray
+                }
+            }
         }
     }
     
-    # Suggest fix
-    $suggestion = Get-FixSuggestion -Repo $Repo
-    if ($suggestion) {
-        Write-Host "      [>] $suggestion" -ForegroundColor Cyan
+    # Suggest fix (only if no branch-specific commands were shown)
+    if (-not $hasBranchIssues) {
+        $suggestion = Get-FixSuggestion -Repo $Repo
+        if ($suggestion) {
+            Write-Host "      [>] $suggestion" -ForegroundColor Cyan
+        }
     }
     
     Write-Host ""

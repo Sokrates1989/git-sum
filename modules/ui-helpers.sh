@@ -88,6 +88,7 @@ show_summary() {
 show_repo_attention() {
     local index=$1
     local dry_run=$2
+    local has_branch_issues=false
     
     local status="${REPO_STATUSES[$index]}"
     local icon
@@ -116,7 +117,7 @@ show_repo_attention() {
         # Show status for all branches that need attention
         cd "${REPO_PATHS[$index]}" || return
         local current_branch="${REPO_BRANCHES[$index]}"
-        local problem_branch=""
+        local has_branch_issues=false
         
         while IFS='|' read -r branch upstream; do
             [[ -z "$branch" || -z "$upstream" ]] && continue
@@ -127,27 +128,45 @@ show_repo_attention() {
             
             if [[ "$ahead" -gt 0 ]] && [[ "$behind" -gt 0 ]]; then
                 echo -e "      Branch $branch: \033[0;31mDiverged ($ahead ahead, $behind behind)\033[0m"
-                problem_branch="$branch"
+                has_branch_issues=true
             elif [[ "$ahead" -gt 0 ]]; then
                 echo -e "      Branch $branch: \033[0;34m$ahead commits ahead\033[0m"
-                problem_branch="$branch"
+                has_branch_issues=true
             elif [[ "$behind" -gt 0 ]]; then
                 echo -e "      Branch $branch: \033[0;33m$behind commits behind\033[0m"
-                problem_branch="$branch"
+                has_branch_issues=true
             fi
         done < <(run_git_command branch --format="%(refname:short)|%(upstream:short)" 2>/dev/null)
         
-        # Update suggestion to include branch checkout if needed
-        if [[ -n "$problem_branch" && "$problem_branch" != "$current_branch" ]]; then
-            echo "      Note: Switch to branch '$problem_branch' first: cd \"${REPO_PATHS[$index]}\" && git checkout $problem_branch"
+        # Create branch-specific commands
+        if [[ "$has_branch_issues" == true ]]; then
+            echo "      [>] Run individual branches:"
+            cd "${REPO_PATHS[$index]}" || return
+            while IFS='|' read -r branch upstream; do
+                [[ -z "$branch" || -z "$upstream" ]] && continue
+                
+                local ahead behind
+                ahead=$(run_git_command rev-list --count "$upstream..$branch" 2>/dev/null || echo 0)
+                behind=$(run_git_command rev-list --count "$branch..$upstream" 2>/dev/null || echo 0)
+                
+                if [[ "$ahead" -gt 0 ]] && [[ "$behind" -gt 0 ]]; then
+                    echo "         cd \"${REPO_PATHS[$index]}\" && git checkout $branch && git status"
+                elif [[ "$ahead" -gt 0 ]]; then
+                    echo "         cd \"${REPO_PATHS[$index]}\" && git checkout $branch && git push"
+                elif [[ "$behind" -gt 0 ]]; then
+                    echo "         cd \"${REPO_PATHS[$index]}\" && git checkout $branch && git pull"
+                fi
+            done < <(run_git_command branch --format="%(refname:short)|%(upstream:short)" 2>/dev/null)
         fi
     fi
     
-    # Suggest fix
-    local suggestion
-    suggestion=$(get_fix_suggestion "$index" "$status")
-    if [[ -n "$suggestion" ]]; then
-        echo "      [>] $suggestion"
+    # Suggest fix (only if no branch-specific commands were shown)
+    if [[ "$has_branch_issues" != true ]]; then
+        local suggestion
+        suggestion=$(get_fix_suggestion "$index" "$status")
+        if [[ -n "$suggestion" ]]; then
+            echo "      [>] $suggestion"
+        fi
     fi
     
     echo ""
