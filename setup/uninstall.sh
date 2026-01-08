@@ -22,7 +22,7 @@ echo "  - Autostart entries (if configured)"
 echo ""
 
 read -p "Continue with uninstall? (y/N): " confirm
-if [[ "${confirm,,}" != "y" ]]; then
+if [[ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
     echo "Uninstall cancelled."
     exit 0
 fi

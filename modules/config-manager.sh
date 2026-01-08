@@ -197,7 +197,7 @@ run_config_editor() {
         
         read -p "Enter choice: " choice
         
-        case "${choice,,}" in
+        case "$(echo "$choice" | tr '[:upper:]' '[:lower:]')" in
             a)
                 run_add_folders true
                 ;;

@@ -32,7 +32,7 @@ run_first_time_setup() {
     
     read -p "Enable autostart? (y/N) " autostart_choice
     
-    if [[ "${autostart_choice,,}" == "y" ]]; then
+    if [[ "$(echo "$autostart_choice" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
         set_autostart "true"
         install_autostart
         echo "[OK] Autostart enabled!"
@@ -77,7 +77,7 @@ run_add_folders() {
         
         read -p "Choose option: " choice
         
-        case "${choice,,}" in
+        case "$(echo "$choice" | tr '[:upper:]' '[:lower:]')" in
             1)
                 local folder
                 folder=$(select_folder_dialog)
