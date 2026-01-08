@@ -78,6 +78,22 @@ function Show-Summary {
         Write-Host "   [X] Errors:      $($errors.Count)" -ForegroundColor Red
     }
     
+    # Show successfully updated repos (so user sees what changed)
+    if ($pulled.Count -gt 0) {
+        Write-Host ""
+        Write-Host "---------------------------------------------------------------" -ForegroundColor Green
+        Write-Host "[OK] Successfully Updated Repositories" -ForegroundColor Green
+        Write-Host "---------------------------------------------------------------" -ForegroundColor Green
+        Write-Host ""
+        
+        foreach ($repo in $pulled) {
+            Write-Host "   [OK] $($repo.name)" -ForegroundColor Green
+            Write-Host "      Path:    $($repo.path)" -ForegroundColor DarkGray
+            Write-Host "      Updated: $($repo.message)" -ForegroundColor Gray
+            Write-Host ""
+        }
+    }
+    
     # Show repos that need attention
     $needsAttention = @()
     $needsAttention += $behind

@@ -20,7 +20,7 @@ function Install-Autostart {
         $WshShell = New-Object -ComObject WScript.Shell
         $Shortcut = $WshShell.CreateShortcut($shortcutPath)
         $Shortcut.TargetPath = "powershell.exe"
-        $Shortcut.Arguments = "-ExecutionPolicy Bypass -WindowStyle Normal -File `"$targetScript`""
+        $Shortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -File `"$targetScript`""
         $Shortcut.WorkingDirectory = $RootDir
         $Shortcut.Description = "git-sum - Git Repository Status Summary"
         $Shortcut.Save()

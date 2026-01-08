@@ -55,6 +55,24 @@ show_summary() {
     [[ "$submodule_updates" -gt 0 ]] && echo "   📦 Submodules:   $submodule_updates"
     [[ "$errors" -gt 0 ]] && echo "   ❌ Errors:      $errors"
     
+    # Show successfully updated repos (so user sees what changed)
+    if [[ "$pulled" -gt 0 ]]; then
+        echo ""
+        echo "---------------------------------------------------------------"
+        echo "[OK] Successfully Updated Repositories"
+        echo "---------------------------------------------------------------"
+        echo ""
+        
+        for i in "${!REPO_STATUSES[@]}"; do
+            if [[ "${REPO_STATUSES[$i]}" == "pulled" ]]; then
+                echo "   [OK] ${REPO_NAMES[$i]}"
+                echo "      Path:    ${REPO_PATHS[$i]}"
+                echo "      Updated: ${REPO_MESSAGES[$i]}"
+                echo ""
+            fi
+        done
+    fi
+    
     # Show repos that need attention
     local needs_attention=$((behind + ahead + diverged + dirty + no_remote + submodule_updates + errors))
     
