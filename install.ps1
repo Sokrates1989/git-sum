@@ -112,6 +112,29 @@ try {
         Write-Host "[WARN] Could not update PATH: $_" -ForegroundColor Yellow
     }
 
+# Step 6: Setup autostart (optional)
+Write-Host ""
+$EnableAutostart = Read-Host "Enable autostart (run git-sum on login)? (y/N)"
+if ($EnableAutostart -eq "y" -or $EnableAutostart -eq "Y") {
+    try {
+        # Source the autostart manager functions
+        $AutostartManager = Join-Path $ScriptDir "modules\autostart-manager.ps1"
+        if (Test-Path $AutostartManager) {
+            . $AutostartManager
+            
+            if (Install-Autostart) {
+                Write-Host "[OK] Autostart enabled - git-sum will run on login" -ForegroundColor Green
+            } else {
+                Write-Host "[!] Failed to enable autostart" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "[!] Autostart manager not found - you can enable it later with: git-sum -as" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "[!] Failed to setup autostart: $_" -ForegroundColor Yellow
+    }
+}
+
 Write-Host ""
 Write-Host "===============================================================" -ForegroundColor Cyan
 Write-Host "[OK] Installation complete!" -ForegroundColor Green

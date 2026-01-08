@@ -89,6 +89,28 @@ EOF
     fi
 fi
 
+# Step 6: Setup autostart (optional)
+echo ""
+read -p "Enable autostart (run git-sum on login)? (y/N): " enable_autostart
+if [[ "$(echo "$enable_autostart" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+    # Source the autostart manager functions
+    if [[ -f "${SCRIPT_DIR}/modules/autostart-manager.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "${SCRIPT_DIR}/modules/autostart-manager.sh"
+        
+        # Set ROOT_DIR for the autostart functions
+        ROOT_DIR="${SCRIPT_DIR}"
+        
+        if install_autostart; then
+            echo "[OK] Autostart enabled - git-sum will run on login"
+        else
+            echo "[!] Failed to enable autostart"
+        fi
+    else
+        echo "[!] Autostart manager not found - you can enable it later with: git-sum -as"
+    fi
+fi
+
 echo ""
 echo "==============================================================="
 echo "[OK] Installation complete!"
