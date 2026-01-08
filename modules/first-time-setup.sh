@@ -7,7 +7,7 @@
 
 # Run first-time setup wizard
 run_first_time_setup() {
-    echo "🚀 First-Time Setup"
+    echo "[*] First-Time Setup"
     echo "==================="
     echo ""
     echo "git-sum scans directories containing git repositories and helps"
@@ -17,31 +17,31 @@ run_first_time_setup() {
     # Add folders
     if ! run_add_folders; then
         echo ""
-        echo "⚠️  No folders were added. Run 'git-sum -a' later to add folders."
+        echo "[!] No folders were added. Run 'git-sum -a' later to add folders."
         return 1
     fi
     
     # Ask about autostart
     echo ""
-    echo "⏰ Autostart Configuration"
+    echo "[*] Autostart Configuration"
     echo "--------------------------"
     echo ""
     echo "Would you like git-sum to run automatically when you log in?"
     echo "This helps ensure your repos are always up to date."
     echo ""
     
-    read -p "Enable autostart? (y/N): " autostart_choice
+    read -p "Enable autostart? (y/N) " autostart_choice
     
     if [[ "${autostart_choice,,}" == "y" ]]; then
         set_autostart "true"
         install_autostart
-        echo "✅ Autostart enabled!"
+        echo "[OK] Autostart enabled!"
     else
-        echo "ℹ️  Autostart not enabled. You can enable it later with 'git-sum -as'"
+        echo "[i] Autostart not enabled. You can enable it later with 'git-sum -as'"
     fi
     
     echo ""
-    echo "✅ Setup complete!"
+    echo "[OK] Setup complete!"
     echo ""
     echo "You can now run:"
     echo "   git-sum          - Check all repos and pull if safe"
@@ -59,18 +59,18 @@ run_add_folders() {
     local folders_added=0
     
     echo ""
-    echo "📁 Add Folders to Watch"
+    echo "[>] Add Folders to Watch"
     echo "-----------------------"
     echo ""
     echo "Select folders that CONTAIN git repositories."
-    echo "(e.g., '~/Projects' if you have repos like '~/Projects/my-repo')"
+    echo "(e.g., '/Users/name/Projects' if you have repos like '.../Projects/my-repo')"
     echo ""
     
     local continue_adding=true
     while [[ "$continue_adding" == true ]]; do
         echo ""
         echo "Options:"
-        echo "   1) Browse for folder (opens file manager)"
+        echo "   1) Browse for folder (if supported)"
         echo "   2) Enter path manually"
         echo "   q) Done adding folders"
         echo ""
@@ -87,13 +87,13 @@ run_add_folders() {
                         show_folder_preview "$folder"
                     fi
                 else
-                    echo "ℹ️  No folder selected."
+                    echo "[i] No folder selected."
                 fi
                 ;;
             2)
                 read -p "Enter folder path: " path
                 if [[ -n "$path" ]]; then
-                    # Expand ~ and environment variables
+                    # Expand ~ to home directory
                     local expanded_path
                     expanded_path=$(eval echo "$path")
                     if add_watched_folder "$expanded_path"; then
@@ -137,7 +137,7 @@ select_folder_dialog() {
         selected_folder=$(kdialog --getexistingdirectory "$HOME" --title "Select a folder containing git repositories" 2>/dev/null)
     else
         # Fallback: just ask for manual input
-        echo "ℹ️  No graphical file picker available. Please enter path manually." >&2
+        echo "[i] No graphical file picker available. Please enter path manually." >&2
         return 1
     fi
     
@@ -165,7 +165,7 @@ show_folder_preview() {
             if [[ "$repo_count" -le "$max_show" ]]; then
                 local repo_name
                 repo_name=$(basename "${subdir%/}")
-                echo "      📦 $repo_name"
+                echo "      [*] $repo_name"
             fi
         fi
     done

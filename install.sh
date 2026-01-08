@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GIT_SUM_SCRIPT="${SCRIPT_DIR}/git-sum.sh"
 
 echo ""
-echo "🔄 git-sum Installer"
+echo "[*] git-sum Installer"
 echo "===================="
 echo ""
 echo "[INFO] Installing git-sum..."
@@ -41,13 +41,13 @@ echo ""
 echo "Creating 'git-sum' command in ${BIN_DIR}..."
 
 if [[ "$NEEDS_SUDO" == true ]]; then
-    echo "🔐 This requires administrator privileges."
+    echo "[!] This requires administrator privileges."
     sudo ln -sf "${GIT_SUM_SCRIPT}" "${BIN_DIR}/git-sum"
 else
     ln -sf "${GIT_SUM_SCRIPT}" "${BIN_DIR}/git-sum"
 fi
 
-echo "✅ Created 'git-sum' command in ${BIN_DIR}"
+echo "[OK] Created 'git-sum' command in ${BIN_DIR}"
 
 # Step 4: Add ~/.local/bin to PATH if needed
 if [[ "$BIN_DIR" == "$HOME/.local/bin" ]]; then
@@ -64,10 +64,10 @@ if [[ "$BIN_DIR" == "$HOME/.local/bin" ]]; then
     if [[ -n "$SHELL_RC" && -f "$SHELL_RC" ]]; then
         if ! grep -Fxq "$EXPORT_LINE" "$SHELL_RC"; then
             echo "$EXPORT_LINE" >> "$SHELL_RC"
-            echo "✅ Added PATH update to $SHELL_RC"
+            echo "[OK] Added PATH update to $SHELL_RC"
             echo "   Run: source $SHELL_RC"
         else
-            echo "ℹ️  PATH already set in $SHELL_RC"
+            echo "[i] PATH already set in $SHELL_RC"
         fi
     fi
 fi
@@ -85,13 +85,13 @@ if [[ "$OSTYPE" == darwin* ]]; then
 "${GIT_SUM_SCRIPT}" "\$@"
 EOF
         chmod +x "${COMMAND_FILE}"
-        echo "✅ Created Desktop shortcut: git-sum.command"
+        echo "[OK] Created Desktop shortcut: git-sum.command"
     fi
 fi
 
 echo ""
 echo "==============================================================="
-echo "✅ Installation complete!"
+echo "[OK] Installation complete!"
 echo ""
 echo "Usage (after restarting terminal or sourcing shell config):"
 echo "  git-sum           - Check all repos and pull if safe"

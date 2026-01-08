@@ -15,7 +15,7 @@ $TargetDir = "$env:USERPROFILE\tools\git-sum"
 $RepoUrl = "https://github.com/Sokrates1989/git-sum.git"
 
 Write-Host ""
-Write-Host "🔄 git-sum Installer" -ForegroundColor Cyan
+Write-Host "[*] git-sum Installer" -ForegroundColor Cyan
 Write-Host "====================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "[INFO] Installing git-sum into $TargetDir" -ForegroundColor Cyan

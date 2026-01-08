@@ -42,7 +42,7 @@ DRY_RUN=false
 
 show_help() {
     echo ""
-    echo "🔄 git-sum - Git Repository Status Summary Tool"
+    echo "[*] git-sum - Git Repository Status Summary Tool"
     echo "================================================"
     echo ""
     echo "Usage:"
@@ -63,34 +63,37 @@ show_help() {
 
 run_update() {
     echo ""
-    echo "🔄 Checking for updates..."
+    echo "[*] Checking for updates..."
     
     cd "${ROOT_DIR}"
     
     local status
-    status=$(git status --porcelain 2>/dev/null || echo "")
+    status=$(run_git_command status --porcelain 2>/dev/null || echo "")
     if [[ -n "$status" ]]; then
-        echo "⚠️  Local changes detected. Please commit or stash them first."
+        echo "[!] Local changes detected. Please commit or stash them first."
         return
     fi
     
-    git fetch origin 2>/dev/null || true
+    run_git_command fetch origin &>/dev/null || true
     local behind
-    behind=$(git rev-list HEAD..origin/main --count 2>/dev/null || echo "0")
+    behind=$(run_git_command rev-list HEAD..origin/main --count 2>/dev/null || echo "0")
     
     if [[ "$behind" -gt 0 ]]; then
-        echo "📥 Updating git-sum ($behind commits behind)..."
-        git pull --ff-only
-        echo "✅ Updated successfully!"
+        echo "[>] Updating git-sum ($behind commits behind)..."
+        if run_git_command pull --ff-only &>/dev/null; then
+            echo "[OK] Updated successfully!"
+        else
+            echo "[X] Update failed during pull."
+        fi
     else
-        echo "✅ Already up to date."
+        echo "[OK] Already up to date."
     fi
 }
 
 check_first_time_setup() {
     if [[ ! -f "$CONFIG_FILE" ]]; then
         echo ""
-        echo "👋 Welcome to git-sum!"
+        echo "[*] Welcome to git-sum!"
         echo "   It looks like this is your first time running git-sum."
         echo ""
         run_first_time_setup
@@ -101,7 +104,7 @@ check_first_time_setup() {
     folder_count=$(get_folder_count)
     if [[ "$folder_count" -eq 0 ]]; then
         echo ""
-        echo "⚠️  No folders configured yet."
+        echo "[!] No folders configured yet."
         echo ""
         run_first_time_setup
         return $?
@@ -138,7 +141,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            echo "❌ Unknown argument: $1"
+            echo "[X] Unknown argument: $1"
             show_help
             exit 1
             ;;
@@ -175,7 +178,7 @@ case "$MODE" in
         fi
         
         echo ""
-        echo "🔄 git-sum - Scanning repositories..."
+        echo "[*] git-sum - Scanning repositories..."
         echo "======================================"
         
         if [[ "$DRY_RUN" == true ]]; then

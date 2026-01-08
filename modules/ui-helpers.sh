@@ -12,7 +12,7 @@ show_summary() {
     
     if [[ "$total" -eq 0 ]]; then
         echo ""
-        echo "📭 No repositories found in watched folders."
+        echo "[!] No repositories found in watched folders."
         echo "   Run 'git-sum -a' to add folders containing git repos."
         return
     fi
@@ -34,9 +34,9 @@ show_summary() {
     done
     
     echo ""
-    echo "═══════════════════════════════════════════════════════════════"
-    echo "📊 Summary"
-    echo "═══════════════════════════════════════════════════════════════"
+    echo "==============================================================="
+    echo "[*] Summary"
+    echo "==============================================================="
     echo ""
     
     # Quick stats line
@@ -44,23 +44,23 @@ show_summary() {
     echo ""
     
     # Status breakdown
-    [[ "$pulled" -gt 0 ]] && echo "   ✅ Pulled:      $pulled"
-    [[ "$up_to_date" -gt 0 ]] && echo "   ✅ Up to date:  $up_to_date"
-    [[ "$behind" -gt 0 ]] && echo "   📥 Behind:      $behind"
-    [[ "$ahead" -gt 0 ]] && echo "   📤 Ahead:       $ahead"
-    [[ "$diverged" -gt 0 ]] && echo "   ⚠️  Diverged:    $diverged"
-    [[ "$dirty" -gt 0 ]] && echo "   ✏️  Dirty:       $dirty"
-    [[ "$no_remote" -gt 0 ]] && echo "   🔗 No remote:   $no_remote"
-    [[ "$errors" -gt 0 ]] && echo "   ❌ Errors:      $errors"
+    [[ "$pulled" -gt 0 ]] && echo "   [OK] Pulled:      $pulled"
+    [[ "$up_to_date" -gt 0 ]] && echo "   [OK] Up to date:  $up_to_date"
+    [[ "$behind" -gt 0 ]] && echo "   [v] Behind:      $behind"
+    [[ "$ahead" -gt 0 ]] && echo "   [^] Ahead:       $ahead"
+    [[ "$diverged" -gt 0 ]] && echo "   [!] Diverged:    $diverged"
+    [[ "$dirty" -gt 0 ]] && echo "   [~] Dirty:       $dirty"
+    [[ "$no_remote" -gt 0 ]] && echo "   [-] No remote:   $no_remote"
+    [[ "$errors" -gt 0 ]] && echo "   [X] Errors:      $errors"
     
     # Show repos that need attention
     local needs_attention=$((behind + ahead + diverged + dirty + errors))
     
     if [[ "$needs_attention" -gt 0 ]]; then
         echo ""
-        echo "───────────────────────────────────────────────────────────────"
-        echo "⚠️  Repositories Needing Attention"
-        echo "───────────────────────────────────────────────────────────────"
+        echo "---------------------------------------------------------------"
+        echo "[!] Repositories Needing Attention"
+        echo "---------------------------------------------------------------"
         echo ""
         
         for i in "${!REPO_STATUSES[@]}"; do
@@ -74,7 +74,7 @@ show_summary() {
     fi
     
     echo ""
-    echo "═══════════════════════════════════════════════════════════════"
+    echo "==============================================================="
     
     if [[ "$dry_run" == "true" ]]; then
         echo "   (Dry run - no changes were made)"
@@ -93,25 +93,47 @@ show_repo_attention() {
     local icon
     
     case "$status" in
-        "behind") icon="📥" ;;
-        "ahead") icon="📤" ;;
-        "diverged") icon="⚠️" ;;
-        "dirty") icon="✏️" ;;
-        "error") icon="❌" ;;
-        "not_git") icon="❓" ;;
-        *) icon="•" ;;
+        "behind") icon="[v]" ;;
+        "ahead") icon="[^]" ;;
+        "diverged") icon="[!]" ;;
+        "dirty") icon="[~]" ;;
+        "error") icon="[X]" ;;
+        "not_git") icon="[?]" ;;
+        *) icon="*" ;;
     esac
     
     echo "   $icon ${REPO_NAMES[$index]}"
-    echo "      Branch: ${REPO_BRANCHES[$index]}"
-    echo "      Status: ${REPO_MESSAGES[$index]}"
     echo "      Path:   ${REPO_PATHS[$index]}"
+    
+    if [[ "$status" == "dirty" ]]; then
+        echo "      Status: ${REPO_MESSAGES[$index]} (on branch: ${REPO_BRANCHES[$index]})"
+    elif [[ "$status" == "error" ]]; then
+        echo "      Error:  ${REPO_MESSAGES[$index]}"
+    else
+        # Show status for all branches that need attention
+        cd "${REPO_PATHS[$index]}" || return
+        while IFS='|' read -r branch upstream; do
+            [[ -z "$branch" || -z "$upstream" ]] && continue
+            
+            local ahead behind
+            ahead=$(run_git_command rev-list --count "$upstream..$branch" 2>/dev/null || echo 0)
+            behind=$(run_git_command rev-list --count "$branch..$upstream" 2>/dev/null || echo 0)
+            
+            if [[ "$ahead" -gt 0 ]] && [[ "$behind" -gt 0 ]]; then
+                echo -e "      Branch $branch: \033[0;31mDiverged ($ahead ahead, $behind behind)\033[0m"
+            elif [[ "$ahead" -gt 0 ]]; then
+                echo -e "      Branch $branch: \033[0;34m$ahead commits ahead\033[0m"
+            elif [[ "$behind" -gt 0 ]]; then
+                echo -e "      Branch $branch: \033[0;33m$behind commits behind\033[0m"
+            fi
+        done < <(run_git_command branch --format="%(refname:short)|%(upstream:short)" 2>/dev/null)
+    fi
     
     # Suggest fix
     local suggestion
     suggestion=$(get_fix_suggestion "$index")
     if [[ -n "$suggestion" ]]; then
-        echo "      💡 $suggestion"
+        echo "      [>] $suggestion"
     fi
     
     echo ""

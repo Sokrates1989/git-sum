@@ -6,10 +6,79 @@
     Handles git repository scanning, status checking, and safe pulling.
 #>
 
+function Run-GitCommand {
+    <#
+    .SYNOPSIS
+        Runs a git command with environment variables to prevent interactive prompts and a hard timeout.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 20,
+        [string]$WorkingDirectory = (Get-Location).Path
+    )
+    
+    $oldPrompt = $env:GIT_TERMINAL_PROMPT
+    $oldGcm = $env:GCM_INTERACTIVE
+    $oldSsh = $env:GIT_SSH_COMMAND
+    
+    try {
+        $env:GIT_TERMINAL_PROMPT = "0"
+        $env:GCM_INTERACTIVE = "never"
+        $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes"
+        
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "git"
+        $psi.Arguments = $Arguments -join " "
+        $psi.WorkingDirectory = $WorkingDirectory
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $psi
+        
+        if (-not $process.Start()) {
+            throw "Failed to start git process"
+        }
+        
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            $process.Kill()
+            $global:LASTEXITCODE = 124 # Timeout exit code
+            return @("Error: Git command timed out after $TimeoutSeconds seconds")
+        }
+        
+        $global:LASTEXITCODE = $process.ExitCode
+        
+        $output = $process.StandardOutput.ReadToEnd()
+        $error = $process.StandardError.ReadToEnd()
+        
+        $lines = @()
+        if ($output) { 
+            $splitLines = $output -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_.ToString() }
+            if ($splitLines) { $lines += $splitLines }
+        }
+        if ($error) { 
+            $splitError = $error -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_.ToString() }
+            if ($splitError) { $lines += $splitError }
+        }
+        
+        return $lines
+    } catch {
+        $global:LASTEXITCODE = 1
+        return @("Error: $($_.Exception.Message)")
+    } finally {
+        $env:GIT_TERMINAL_PROMPT = $oldPrompt
+        $env:GCM_INTERACTIVE = $oldGcm
+        $env:GIT_SSH_COMMAND = $oldSsh
+    }
+}
+
 function Get-RepoStatus {
     <#
     .SYNOPSIS
-        Gets the detailed status of a git repository
+        Gets the detailed status of a git repository across all local branches
     .PARAMETER RepoPath
         Path to the git repository
     .RETURNS
@@ -27,21 +96,18 @@ function Get-RepoStatus {
         currentBranch = ""
         hasUncommittedChanges = $false
         hasUntrackedFiles = $false
-        aheadCount = 0
-        behindCount = 0
         hasRemote = $false
-        branches = @()
+        branches = @() # Array of branch status objects
         status = "unknown"
         message = ""
         canPull = $false
-        pullResult = $null
     }
     
     Push-Location $RepoPath
     try {
         # Check if it's a git repo
-        $gitDir = git rev-parse --git-dir 2>$null
-        if (-not $gitDir) {
+        $gitDir = Run-GitCommand -Arguments "rev-parse", "--git-dir" -WorkingDirectory $RepoPath
+        if ($LASTEXITCODE -ne 0) {
             $result.status = "not_git"
             $result.message = "Not a git repository"
             Pop-Location
@@ -51,17 +117,15 @@ function Get-RepoStatus {
         $result.isGitRepo = $true
         
         # Get current branch
-        $result.currentBranch = git rev-parse --abbrev-ref HEAD 2>$null
-        if (-not $result.currentBranch) {
-            $result.currentBranch = "(detached)"
-        }
+        $branchInfo = Run-GitCommand -Arguments "rev-parse", "--abbrev-ref", "HEAD" -WorkingDirectory $RepoPath
+        $result.currentBranch = ($branchInfo | Select-Object -First 1).Trim()
         
         # Check for uncommitted changes
-        $status = git status --porcelain 2>$null
-        if ($status) {
-            $staged = $status | Where-Object { $_ -match "^[MADRC]" }
-            $unstaged = $status | Where-Object { $_ -match "^.[MADRC]" }
-            $untracked = $status | Where-Object { $_ -match "^\?\?" }
+        $statusLines = Run-GitCommand -Arguments "status", "--porcelain" -WorkingDirectory $RepoPath
+        if ($statusLines) {
+            $staged = $statusLines | Where-Object { $_ -match "^[MADRC]" }
+            $unstaged = $statusLines | Where-Object { $_ -match "^.[MADRC]" }
+            $untracked = $statusLines | Where-Object { $_ -match "^\?\?" }
             
             if ($staged -or $unstaged) {
                 $result.hasUncommittedChanges = $true
@@ -72,55 +136,68 @@ function Get-RepoStatus {
         }
         
         # Check for remote
-        $remotes = git remote 2>$null
+        $remotes = Run-GitCommand -Arguments "remote" -WorkingDirectory $RepoPath
         $result.hasRemote = [bool]$remotes
         
         if ($result.hasRemote) {
-            # Fetch to check for updates (quiet)
-            git fetch --all --quiet 2>$null
+            # Fetch to check for updates (quiet, non-interactive)
+            Run-GitCommand -Arguments "fetch", "--all", "--quiet" -WorkingDirectory $RepoPath
             
-            # Check ahead/behind
-            $tracking = git rev-parse --abbrev-ref "@{upstream}" 2>$null
-            if ($tracking) {
-                $ahead = git rev-list --count "@{upstream}..HEAD" 2>$null
-                $behind = git rev-list --count "HEAD..@{upstream}" 2>$null
-                
-                if ($ahead) { $result.aheadCount = [int]$ahead }
-                if ($behind) { $result.behindCount = [int]$behind }
+            # Get all local branches and their status relative to upstream
+            $branchList = Run-GitCommand -Arguments "branch", "--format=%(refname:short)|%(upstream:short)" -WorkingDirectory $RepoPath
+            foreach ($line in $branchList) {
+                if ($line -match "^(.+)\|(.+)$") {
+                    $branchName = $matches[1]
+                    $upstream = $matches[2]
+                    
+                    if ($upstream) {
+                        $aheadStr = (Run-GitCommand -Arguments "rev-list", "--count", "$upstream..$branchName" -WorkingDirectory $RepoPath)[0].ToString()
+                        $behindStr = (Run-GitCommand -Arguments "rev-list", "--count", "$branchName..$upstream" -WorkingDirectory $RepoPath)[0].ToString()
+                        
+                        $ahead = 0
+                        $behind = 0
+                        if ($aheadStr -match "^\d+$") { $ahead = [int]$aheadStr }
+                        if ($behindStr -match "^\d+$") { $behind = [int]$behindStr }
+                        
+                        $branchStatus = @{
+                            name = $branchName
+                            upstream = $upstream
+                            ahead = $ahead
+                            behind = $behind
+                        }
+                        $result.branches += $branchStatus
+                    }
+                }
             }
         }
         
-        # Get all local branches
-        $branches = git branch --format="%(refname:short)" 2>$null
-        if ($branches) {
-            $result.branches = @($branches)
-        }
-        
-        # Determine overall status and if we can pull
+        # Determine overall status
         if (-not $result.hasRemote) {
             $result.status = "no_remote"
             $result.message = "No remote configured"
-            $result.canPull = $false
         } elseif ($result.hasUncommittedChanges) {
             $result.status = "dirty"
             $result.message = "Has uncommitted changes"
-            $result.canPull = $false
-        } elseif ($result.aheadCount -gt 0 -and $result.behindCount -gt 0) {
-            $result.status = "diverged"
-            $result.message = "Diverged ($($result.aheadCount) ahead, $($result.behindCount) behind)"
-            $result.canPull = $false
-        } elseif ($result.aheadCount -gt 0) {
-            $result.status = "ahead"
-            $result.message = "$($result.aheadCount) commits ahead (needs push)"
-            $result.canPull = $false
-        } elseif ($result.behindCount -gt 0) {
-            $result.status = "behind"
-            $result.message = "$($result.behindCount) commits behind"
-            $result.canPull = $true
         } else {
-            $result.status = "up_to_date"
-            $result.message = "Up to date"
-            $result.canPull = $false
+            # Evaluate all branches
+            $anyBehind = $result.branches | Where-Object { $_.behind -gt 0 }
+            $anyAhead = $result.branches | Where-Object { $_.ahead -gt 0 }
+            $anyDiverged = $result.branches | Where-Object { $_.ahead -gt 0 -and $_.behind -gt 0 }
+            
+            if ($anyDiverged) {
+                $result.status = "diverged"
+                $result.message = "Some branches have diverged"
+            } elseif ($anyBehind) {
+                $result.status = "behind"
+                $result.message = "$($anyBehind.Count) branch(es) behind"
+                $result.canPull = $true
+            } elseif ($anyAhead) {
+                $result.status = "ahead"
+                $result.message = "$($anyAhead.Count) branch(es) ahead"
+            } else {
+                $result.status = "up_to_date"
+                $result.message = "All branches up to date"
+            }
         }
         
     } catch {
@@ -136,51 +213,28 @@ function Get-RepoStatus {
 function Invoke-SafePull {
     <#
     .SYNOPSIS
-        Performs a safe git pull on a repository
+        Performs a safe git pull on all branches that are behind
     .PARAMETER RepoPath
         Path to the git repository
     .RETURNS
-        Hashtable with pull result
+        Hashtable with pull results summary
     #>
     param(
         [Parameter(Mandatory=$true)]
         [string]$RepoPath
     )
     
-    $result = @{
-        success = $false
-        message = ""
-        commitsBefore = ""
-        commitsAfter = ""
-    }
+    $results = Invoke-PullAllBranches -RepoPath $RepoPath
     
-    Push-Location $RepoPath
-    try {
-        $result.commitsBefore = git rev-parse HEAD 2>$null
-        
-        # Try fast-forward only pull
-        $output = git pull --ff-only 2>&1
-        
-        if ($LASTEXITCODE -eq 0) {
-            $result.success = $true
-            $result.commitsAfter = git rev-parse HEAD 2>$null
-            
-            if ($result.commitsBefore -eq $result.commitsAfter) {
-                $result.message = "Already up to date"
-            } else {
-                $newCommits = git rev-list --count "$($result.commitsBefore)..$($result.commitsAfter)" 2>$null
-                $result.message = "Pulled $newCommits new commit(s)"
-            }
-        } else {
-            $result.message = "Pull failed: $output"
-        }
-    } catch {
-        $result.message = "Error: $_"
-    } finally {
-        Pop-Location
-    }
+    $successCount = ($results | Where-Object { $_.success }).Count
+    $totalCount = $results.Count
+    $pulledCount = ($results | Where-Object { $_.success -and $_.message -match "Pulled" }).Count
     
-    return $result
+    return @{
+        success = ($successCount -eq $totalCount)
+        message = "Updated $pulledCount branch(es)"
+        detailResults = $results
+    }
 }
 
 function Invoke-PullAllBranches {
@@ -201,65 +255,76 @@ function Invoke-PullAllBranches {
     
     Push-Location $RepoPath
     try {
-        $originalBranch = git rev-parse --abbrev-ref HEAD 2>$null
-        $branches = git branch --format="%(refname:short)" 2>$null
+        $originalBranch = (Run-GitCommand -Arguments "rev-parse", "--abbrev-ref", "HEAD" -WorkingDirectory $RepoPath)[0].ToString()
+        $branchInfo = Run-GitCommand -Arguments "branch", "--format=%(refname:short)|%(upstream:short)" -WorkingDirectory $RepoPath
         
-        foreach ($branch in $branches) {
-            $branchResult = @{
-                branch = $branch
-                success = $false
-                message = ""
-                skipped = $false
-            }
-            
-            # Check if branch has upstream
-            $upstream = git rev-parse --abbrev-ref "$branch@{upstream}" 2>$null
-            if (-not $upstream) {
-                $branchResult.skipped = $true
-                $branchResult.message = "No upstream tracking"
+        foreach ($line in $branchInfo) {
+            if ($line -match "^(.+)\|(.+)$") {
+                $branch = $matches[1]
+                $upstream = $matches[2]
+                
+                $branchResult = @{
+                    branch = $branch
+                    success = $false
+                    message = ""
+                    skipped = $false
+                }
+                
+                if (-not $upstream) {
+                    $branchResult.skipped = $true
+                    $branchResult.message = "No upstream tracking"
+                    $results += $branchResult
+                    continue
+                }
+                
+                # Check behind count
+                $behind = [int](Run-GitCommand -Arguments "rev-list", "--count", "$branch..$upstream" -WorkingDirectory $RepoPath)[0].ToString()
+                if ($behind -eq 0) {
+                    $branchResult.success = $true
+                    $branchResult.message = "Already up to date"
+                    $results += $branchResult
+                    continue
+                }
+                
+                # Switch to branch if necessary
+                if ($branch -ne $originalBranch) {
+                    Run-GitCommand -Arguments "checkout", "$branch", "--quiet" -WorkingDirectory $RepoPath
+                    if ($LASTEXITCODE -ne 0) {
+                        $branchResult.message = "Could not checkout"
+                        $results += $branchResult
+                        continue
+                    }
+                }
+                
+                # Check if clean (needed before pull)
+                $status = Run-GitCommand -Arguments "status", "--porcelain" -WorkingDirectory $RepoPath
+                if ($status) {
+                    $branchResult.message = "Has local changes"
+                    if ($branch -ne $originalBranch) {
+                         Run-GitCommand -Arguments "checkout", "$originalBranch", "--quiet" -WorkingDirectory $RepoPath
+                    }
+                    $results += $branchResult
+                    continue
+                }
+                
+                # Try pull
+                Run-GitCommand -Arguments "pull", "--ff-only" -WorkingDirectory $RepoPath
+                if ($LASTEXITCODE -eq 0) {
+                    $branchResult.success = $true
+                    $branchResult.message = "Pulled $behind new commit(s)"
+                } else {
+                    $branchResult.message = "Pull failed"
+                }
+                
                 $results += $branchResult
-                continue
             }
-            
-            # Switch to branch
-            git checkout $branch --quiet 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                $branchResult.message = "Could not checkout"
-                $results += $branchResult
-                continue
-            }
-            
-            # Check if clean
-            $status = git status --porcelain 2>$null
-            if ($status) {
-                $branchResult.message = "Has local changes"
-                $results += $branchResult
-                continue
-            }
-            
-            # Check if can fast-forward
-            $behind = git rev-list --count "HEAD..$upstream" 2>$null
-            if ([int]$behind -eq 0) {
-                $branchResult.success = $true
-                $branchResult.message = "Already up to date"
-                $results += $branchResult
-                continue
-            }
-            
-            # Try pull
-            $pullOutput = git pull --ff-only 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                $branchResult.success = $true
-                $branchResult.message = "Pulled $behind commit(s)"
-            } else {
-                $branchResult.message = "Pull failed"
-            }
-            
-            $results += $branchResult
         }
         
-        # Return to original branch
-        git checkout $originalBranch --quiet 2>$null
+        # Return to original branch if we moved
+        $currentBranch = (Run-GitCommand -Arguments "rev-parse", "--abbrev-ref", "HEAD" -WorkingDirectory $RepoPath)[0].ToString()
+        if ($currentBranch -ne $originalBranch) {
+            Run-GitCommand -Arguments "checkout", "$originalBranch", "--quiet" -WorkingDirectory $RepoPath
+        }
         
     } catch {
         Write-Host "Error pulling branches: $_" -ForegroundColor Red

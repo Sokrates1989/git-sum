@@ -104,7 +104,7 @@ add_watched_folder() {
     
     # Validate folder exists
     if [[ ! -d "$folder_path" ]]; then
-        echo "❌ Folder does not exist: $folder_path"
+        echo "[X] Folder does not exist: $folder_path"
         return 1
     fi
     
@@ -120,7 +120,7 @@ add_watched_folder() {
         
         # Check if already exists
         if jq -e ".folders | index(\"$normalized_path\")" "$CONFIG_FILE" &>/dev/null; then
-            echo "ℹ️  Folder already in watch list: $normalized_path"
+            echo "[i] Folder already in watch list: $normalized_path"
             return 1
         fi
         
@@ -133,7 +133,7 @@ add_watched_folder() {
         save_config "[\"$normalized_path\"]" "false"
     fi
     
-    echo "✅ Added folder: $normalized_path"
+    echo "[OK] Added folder: $normalized_path"
     return 0
 }
 
@@ -142,7 +142,7 @@ remove_watched_folder() {
     local folder_path=$1
     
     if [[ ! -f "$CONFIG_FILE" ]] || ! command -v jq &>/dev/null; then
-        echo "ℹ️  No config file or jq not available"
+        echo "[i] No config file or jq not available"
         return 1
     fi
     
@@ -154,7 +154,7 @@ remove_watched_folder() {
     new_folders=$(jq ".folders | map(select(. != \"$folder_path\"))" "$CONFIG_FILE")
     
     save_config "$new_folders" "$autostart"
-    echo "✅ Removed folder: $folder_path"
+    echo "[OK] Removed folder: $folder_path"
     return 0
 }
 
@@ -162,7 +162,7 @@ remove_watched_folder() {
 run_config_editor() {
     while true; do
         echo ""
-        echo "⚙️  git-sum Configuration"
+        echo "[*] git-sum Configuration"
         echo "========================="
         echo ""
         echo "Current watched folders:"
@@ -176,9 +176,9 @@ run_config_editor() {
             local index=1
             while IFS= read -r folder; do
                 if [[ -d "$folder" ]]; then
-                    echo "   $index) $folder ✅"
+                    echo "   $index) $folder [OK]"
                 else
-                    echo "   $index) $folder ❌ (not found)"
+                    echo "   $index) $folder [X] (not found)"
                 fi
                 ((index++))
             done < <(get_all_folders)

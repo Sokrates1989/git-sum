@@ -48,6 +48,12 @@ function Get-WatchedFolders {
             if ($content.settings.lastRun) {
                 $config.settings.lastRun = $content.settings.lastRun
             }
+        } else {
+            # Ensure settings exist even if not in file
+            $config.settings = @{
+                autostart = $false
+                lastRun = $null
+            }
         }
         
         return $config

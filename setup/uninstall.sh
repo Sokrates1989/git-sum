@@ -8,7 +8,7 @@
 set -e
 
 echo ""
-echo "🗑️  git-sum Uninstaller"
+echo "[*] git-sum Uninstaller"
 echo "======================="
 echo ""
 
@@ -33,12 +33,12 @@ echo "Removing symlinks..."
 
 if [[ -L "/usr/local/bin/git-sum" ]]; then
     sudo rm -f "/usr/local/bin/git-sum" 2>/dev/null || rm -f "/usr/local/bin/git-sum"
-    echo "  ✅ Removed /usr/local/bin/git-sum"
+    echo "  [OK] Removed /usr/local/bin/git-sum"
 fi
 
 if [[ -L "$HOME/.local/bin/git-sum" ]]; then
     rm -f "$HOME/.local/bin/git-sum"
-    echo "  ✅ Removed ~/.local/bin/git-sum"
+    echo "  [OK] Removed ~/.local/bin/git-sum"
 fi
 
 # Remove autostart (macOS)
@@ -47,20 +47,20 @@ if [[ "$OSTYPE" == darwin* ]]; then
     if [[ -f "$PLIST" ]]; then
         launchctl unload "$PLIST" 2>/dev/null || true
         rm -f "$PLIST"
-        echo "  ✅ Removed macOS autostart"
+        echo "  [OK] Removed macOS autostart"
     fi
     
     # Remove Desktop shortcut
     if [[ -f "$HOME/Desktop/git-sum.command" ]]; then
         rm -f "$HOME/Desktop/git-sum.command"
-        echo "  ✅ Removed Desktop shortcut"
+        echo "  [OK] Removed Desktop shortcut"
     fi
 fi
 
 # Remove autostart (Linux)
 if [[ -f "$HOME/.config/autostart/git-sum.desktop" ]]; then
     rm -f "$HOME/.config/autostart/git-sum.desktop"
-    echo "  ✅ Removed Linux autostart"
+    echo "  [OK] Removed Linux autostart"
 fi
 
 # Remove installation directory
@@ -69,19 +69,19 @@ echo "Removing installation directory..."
 
 if [[ -d "$INSTALL_DIR" ]]; then
     rm -rf "$INSTALL_DIR"
-    echo "  ✅ Removed $INSTALL_DIR"
+    echo "  [OK] Removed $INSTALL_DIR"
 else
-    echo "  ℹ️  Directory not found: $INSTALL_DIR"
+    echo "  [i] Directory not found: $INSTALL_DIR"
 fi
 
 # Clean up empty parent directory
 if [[ -d "$HOME/tools" ]] && [[ -z "$(ls -A "$HOME/tools" 2>/dev/null)" ]]; then
     rmdir "$HOME/tools" 2>/dev/null || true
-    echo "  ✅ Removed empty ~/tools directory"
+    echo "  [OK] Removed empty ~/tools directory"
 fi
 
 echo ""
-echo "✅ git-sum has been uninstalled."
+echo "[OK] git-sum has been uninstalled."
 echo ""
 echo "Note: You may need to remove PATH entries from your shell config"
 echo "      (~/.bashrc, ~/.zshrc) if they were added manually."

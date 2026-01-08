@@ -66,7 +66,7 @@ EOF
     
     launchctl load "$plist_path" 2>/dev/null || true
     
-    echo "✅ Added git-sum to macOS Login Items"
+    echo "[OK] Added git-sum to macOS Login Items"
     echo "   Location: $plist_path"
 }
 
@@ -76,9 +76,9 @@ uninstall_autostart_macos() {
     if [[ -f "$plist_path" ]]; then
         launchctl unload "$plist_path" 2>/dev/null || true
         rm -f "$plist_path"
-        echo "✅ Removed git-sum from macOS Login Items"
+        echo "[OK] Removed git-sum from macOS Login Items"
     else
-        echo "ℹ️  git-sum was not in startup"
+        echo "[i] git-sum was not in startup"
     fi
 }
 
@@ -110,7 +110,7 @@ EOF
     
     chmod +x "$desktop_file"
     
-    echo "✅ Added git-sum to Linux autostart"
+    echo "[OK] Added git-sum to Linux autostart"
     echo "   Location: $desktop_file"
 }
 
@@ -119,9 +119,9 @@ uninstall_autostart_linux() {
     
     if [[ -f "$desktop_file" ]]; then
         rm -f "$desktop_file"
-        echo "✅ Removed git-sum from Linux autostart"
+        echo "[OK] Removed git-sum from Linux autostart"
     else
-        echo "ℹ️  git-sum was not in startup"
+        echo "[i] git-sum was not in startup"
     fi
 }
 
@@ -136,15 +136,15 @@ run_autostart_config() {
     is_installed=$(is_autostart_installed && echo "true" || echo "false")
     
     echo ""
-    echo "⏰ Autostart Configuration"
+    echo "[*] Autostart Configuration"
     echo "=========================="
     echo ""
     
     if [[ "$is_installed" == "true" ]]; then
-        echo "   Status: ✅ Enabled"
+        echo "   Status: [OK] Enabled"
         echo "   git-sum will run when you log in."
     else
-        echo "   Status: ❌ Disabled"
+        echo "   Status: [X] Disabled"
         echo "   git-sum will not run automatically."
     fi
     

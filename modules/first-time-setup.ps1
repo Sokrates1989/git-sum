@@ -139,45 +139,40 @@ function Invoke-AddFolders {
 function Select-FolderDialog {
     <#
     .SYNOPSIS
-        Opens native Windows folder picker dialog
+        Opens native Windows folder picker dialog in a separate process to prevent hangs
     .RETURNS
         Selected folder path or $null if cancelled
     #>
     
-    Add-Type -AssemblyName System.Windows.Forms
+    Write-Host "[i] Launching folder picker... (check your taskbar if it doesn't appear)" -ForegroundColor Gray
     
-    $browser = New-Object System.Windows.Forms.FolderBrowserDialog
-    $browser.Description = "Select a folder containing git repositories"
-    $browser.RootFolder = [Environment+SpecialFolder]::MyComputer
-    $browser.ShowNewFolderButton = $false
-    
-    # Try to start from a sensible location
-    $defaultPath = $null
-    $possiblePaths = @(
-        "$env:USERPROFILE\Projects",
-        "$env:USERPROFILE\Development",
-        "$env:USERPROFILE\Code",
-        "$env:USERPROFILE\repos",
-        "$env:USERPROFILE\git",
-        "$env:USERPROFILE\Documents\GitHub",
-        "$env:USERPROFILE"
-    )
-    
-    foreach ($path in $possiblePaths) {
-        if (Test-Path $path) {
-            $defaultPath = $path
-            break
+    try {
+        # Run in a separate process to avoid threading/apartment state issues in the main terminal
+        # Ensure we only get the path back by using Out-String and Trim
+        $code = "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; " +
+                "`$obj = New-Object System.Windows.Forms.FolderBrowserDialog; " +
+                "`$obj.Description = 'Select a folder containing git repositories'; " +
+                "`$obj.ShowNewFolderButton = `$false; " +
+                "if(`$obj.ShowDialog() -eq 'OK') { Write-Output `$obj.SelectedPath }"
+        
+        # Use -NoLogo and -NoProfile to minimize noise
+        $result = powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command $code
+        
+        if ($result) {
+            # Capture only the last line if multiple lines returned
+            if ($result -is [array]) {
+                $path = [string]($result[-1])
+            } else {
+                $path = [string]$result
+            }
+            
+            $path = $path.Trim()
+            if ($path -and (Test-Path $path)) {
+                return $path
+            }
         }
-    }
-    
-    if ($defaultPath) {
-        $browser.SelectedPath = $defaultPath
-    }
-    
-    $result = $browser.ShowDialog()
-    
-    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-        return $browser.SelectedPath
+    } catch {
+        Write-Host "[!] Error opening folder picker: $_" -ForegroundColor Yellow
     }
     
     return $null

@@ -12,7 +12,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $GitSumScript = Join-Path $ScriptDir "git-sum.ps1"
 
 Write-Host ""
-Write-Host "🔄 git-sum Installer" -ForegroundColor Cyan
+Write-Host "[*] git-sum Installer" -ForegroundColor Cyan
 Write-Host "====================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "[INFO] Installing git-sum..." -ForegroundColor Cyan
@@ -55,14 +55,14 @@ if (-not $AliasExists) {
         Add-Content -Path $PROFILE -Value ""
         Add-Content -Path $PROFILE -Value "# git-sum - Git Repository Status Summary"
         Add-Content -Path $PROFILE -Value $AliasLine
-        Write-Host "✅ Added 'git-sum' alias to PowerShell profile." -ForegroundColor Green
+        Write-Host "[OK] Added 'git-sum' alias to PowerShell profile." -ForegroundColor Green
         Write-Host "   Restart your terminal or run: . `$PROFILE" -ForegroundColor Yellow
     } else {
-        Write-Host "ℹ️  Skipped adding alias. You can run git-sum directly:" -ForegroundColor Gray
+        Write-Host "[i] Skipped adding alias. You can run git-sum directly:" -ForegroundColor Gray
         Write-Host "   $GitSumScript" -ForegroundColor Gray
     }
 } else {
-    Write-Host "✅ 'git-sum' alias already exists in PowerShell profile." -ForegroundColor Green
+    Write-Host "[OK] 'git-sum' alias already exists in PowerShell profile." -ForegroundColor Green
 }
 
 # Step 4: Create Desktop shortcut (optional)
@@ -80,7 +80,7 @@ if ($CreateShortcut -eq "y" -or $CreateShortcut -eq "Y") {
         $Shortcut.WorkingDirectory = $ScriptDir
         $Shortcut.Description = "git-sum - Git Repository Status Summary"
         $Shortcut.Save()
-        Write-Host "✅ Created Desktop shortcut: git-sum.lnk" -ForegroundColor Green
+        Write-Host "[OK] Created Desktop shortcut: git-sum.lnk" -ForegroundColor Green
     } catch {
         Write-Host "[WARN] Could not create Desktop shortcut: $_" -ForegroundColor Yellow
     }
@@ -93,26 +93,31 @@ $AddToPath = Read-Host "Add git-sum to system PATH for CMD access? (y/N)"
 if ($AddToPath -eq "y" -or $AddToPath -eq "Y") {
     # Create a batch wrapper
     $BatchWrapper = Join-Path $ScriptDir "git-sum.cmd"
-    $BatchContent = @"
-@echo off
-powershell.exe -ExecutionPolicy Bypass -File "%~dp0git-sum.ps1" %*
-"@
-    Set-Content -Path $BatchWrapper -Value $BatchContent -Encoding ASCII
+    $BatchLines = @(
+        "@echo off",
+        "powershell.exe -ExecutionPolicy Bypass -File ""%~dp0git-sum.ps1"" %*"
+    )
+    $BatchLines | Set-Content -Path $BatchWrapper -Encoding ASCII
     
     # Add to user PATH
-    $CurrentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-    if ($CurrentPath -notlike "*$ScriptDir*") {
-        [Environment]::SetEnvironmentVariable("PATH", "$CurrentPath;$ScriptDir", "User")
-        Write-Host "✅ Added git-sum to user PATH." -ForegroundColor Green
-        Write-Host "   Restart your terminal for changes to take effect." -ForegroundColor Yellow
-    } else {
-        Write-Host "ℹ️  git-sum directory already in PATH." -ForegroundColor Gray
+    try {
+        $CurrentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+        if ($CurrentPath -notlike "*$ScriptDir*") {
+            $NewPath = "$CurrentPath;$ScriptDir"
+            [Environment]::SetEnvironmentVariable("PATH", $NewPath, "User")
+            Write-Host "[OK] Added git-sum to user PATH." -ForegroundColor Green
+            Write-Host "   Restart your terminal for changes to take effect." -ForegroundColor Yellow
+        } else {
+            Write-Host "[i] git-sum directory already in PATH." -ForegroundColor Gray
+        }
+    } catch {
+        Write-Host "[WARN] Could not update PATH: $_" -ForegroundColor Yellow
     }
 }
 
 Write-Host ""
 Write-Host "===============================================================" -ForegroundColor Cyan
-Write-Host "✅ Installation complete!" -ForegroundColor Green
+Write-Host "[OK] Installation complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Usage (after restarting terminal):" -ForegroundColor White
 Write-Host "  git-sum           - Check all repos and pull if safe" -ForegroundColor Gray

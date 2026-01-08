@@ -128,20 +128,26 @@ function Invoke-Update {
     
     Push-Location $RootDir
     try {
-        $status = git status --porcelain 2>$null
-        if ($status) {
+        $statusLines = Run-GitCommand -Arguments "status", "--porcelain" -WorkingDirectory $RootDir
+        if ($statusLines) {
             Write-Host "[!] Local changes detected. Please commit or stash them first." -ForegroundColor Yellow
             Pop-Location
             return
         }
         
-        git fetch origin 2>$null
-        $behind = git rev-list HEAD..origin/main --count 2>$null
+        Run-GitCommand -Arguments "fetch", "origin" -WorkingDirectory $RootDir
+        $behindLines = Run-GitCommand -Arguments "rev-list", "HEAD..origin/main", "--count" -WorkingDirectory $RootDir
+        $behind = 0
+        if ($behindLines -and $behindLines[0].ToString() -match "^\d+$") { $behind = [int]$behindLines[0] }
         
         if ($behind -gt 0) {
             Write-Host "[>] Updating git-sum ($($behind) commits behind)..." -ForegroundColor Yellow
-            git pull --ff-only
-            Write-Host "[OK] Updated successfully!" -ForegroundColor Green
+            Run-GitCommand -Arguments "pull", "--ff-only" -WorkingDirectory $RootDir
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[OK] Updated successfully!" -ForegroundColor Green
+            } else {
+                Write-Host "[ERROR] Pull failed during update." -ForegroundColor Red
+            }
         } else {
             Write-Host "[OK] Already up to date." -ForegroundColor Green
         }

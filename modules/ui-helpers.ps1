@@ -39,9 +39,9 @@ function Show-Summary {
     $errors = @($Results | Where-Object { $_.status -eq "error" -or $_.status -eq "not_git" })
     
     Write-Host ""
-    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "===============================================================" -ForegroundColor Cyan
     Write-Host "[*] Summary" -ForegroundColor Cyan
-    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "===============================================================" -ForegroundColor Cyan
     Write-Host ""
     
     # Quick stats line
@@ -84,9 +84,9 @@ function Show-Summary {
     
     if ($needsAttention.Count -gt 0) {
         Write-Host ""
-        Write-Host "───────────────────────────────────────────────────────────────" -ForegroundColor Yellow
+        Write-Host "---------------------------------------------------------------" -ForegroundColor Yellow
         Write-Host "[!] Repositories Needing Attention" -ForegroundColor Yellow
-        Write-Host "───────────────────────────────────────────────────────────────" -ForegroundColor Yellow
+        Write-Host "---------------------------------------------------------------" -ForegroundColor Yellow
         Write-Host ""
         
         foreach ($repo in $needsAttention) {
@@ -95,7 +95,7 @@ function Show-Summary {
     }
     
     Write-Host ""
-    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "===============================================================" -ForegroundColor Cyan
     
     if ($DryRun) {
         Write-Host "   (Dry run - no changes were made)" -ForegroundColor Yellow
@@ -127,13 +127,28 @@ function Show-RepoAttention {
         "dirty" { "[~]" }
         "error" { "[X]" }
         "not_git" { "[?]" }
-        default { "•" }
+        default { "*" }
     }
     
     Write-Host "   $icon $($Repo.name)" -ForegroundColor White
-    Write-Host "      Branch: $($Repo.currentBranch)" -ForegroundColor Gray
-    Write-Host "      Status: $($Repo.message)" -ForegroundColor Gray
     Write-Host "      Path:   $($Repo.path)" -ForegroundColor DarkGray
+    
+    if ($Repo.status -eq "dirty") {
+        Write-Host "      Status: $($Repo.message) (on branch: $($Repo.currentBranch))" -ForegroundColor Gray
+    } elseif ($Repo.status -eq "error") {
+        Write-Host "      Error:  $($Repo.message)" -ForegroundColor Red
+    } else {
+        # Show status for all branches that need attention
+        foreach ($branch in $Repo.branches) {
+            if ($branch.ahead -gt 0 -and $branch.behind -gt 0) {
+                Write-Host "      Branch $($branch.name): Diverged ($($branch.ahead) ahead, $($branch.behind) behind)" -ForegroundColor Red
+            } elseif ($branch.ahead -gt 0) {
+                Write-Host "      Branch $($branch.name): $($branch.ahead) commits ahead" -ForegroundColor Blue
+            } elseif ($branch.behind -gt 0) {
+                Write-Host "      Branch $($branch.name): $($branch.behind) commits behind" -ForegroundColor Yellow
+            }
+        }
+    }
     
     # Suggest fix
     $suggestion = Get-FixSuggestion -Repo $Repo
@@ -226,7 +241,7 @@ function Show-ProgressBar {
     $filled = [math]::Round(($Current / $Total) * 20)
     $empty = 20 - $filled
     
-    $bar = "[" + ("█" * $filled) + ("░" * $empty) + "]"
+    $bar = "[" + ("#" * $filled) + ("-" * $empty) + "]"
     
     Write-Host "`r   $bar $percent% $Label" -NoNewline
 }
