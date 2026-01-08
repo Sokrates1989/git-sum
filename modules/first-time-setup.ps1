@@ -49,35 +49,16 @@ function Invoke-FirstTimeSetup {
         return $false
     }
     
-    # Ask about autostart
-    Write-Host ""
-    Write-Host "[*] Autostart Configuration" -ForegroundColor Cyan
-    Write-Host "--------------------------" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "Would you like git-sum to run automatically when you log in?"
-    Write-Host "This helps ensure your repos are always up to date."
-    Write-Host ""
-    
-    $autostart = Read-Host "Enable autostart? (y/N)"
-    
-    if ($autostart -eq "y" -or $autostart -eq "Y") {
-        $config = Get-WatchedFolders
-        $config.settings.autostart = $true
-        Save-WatchedFolders -Config $config
-        Install-Autostart
-        Write-Host "[OK] Autostart enabled!" -ForegroundColor Green
-    } else {
-        Write-Host "[i] Autostart not enabled. You can enable it later with 'git-sum -as'" -ForegroundColor Gray
-    }
-    
     Write-Host ""
     Write-Host "[OK] Setup complete!" -ForegroundColor Green
     Write-Host ""
-    Write-Host "You can now run:" -ForegroundColor Yellow
-    Write-Host "   git-sum          - Check all repos and pull if safe"
-    Write-Host "   git-sum -s       - Show status without pulling"
-    Write-Host "   git-sum -a       - Add more folders"
-    Write-Host "   git-sum -h       - Show help"
+    Write-Host "You can configure autostart later with 'git-sum -as'" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "You can now run:" -ForegroundColor White
+    Write-Host "   git-sum          - Check all repos and pull if safe" -ForegroundColor Gray
+    Write-Host "   git-sum -s       - Show status without pulling" -ForegroundColor Gray
+    Write-Host "   git-sum -a       - Add more folders" -ForegroundColor Gray
+    Write-Host "   git-sum -h       - Show help" -ForegroundColor Gray
     Write-Host ""
     
     return $true

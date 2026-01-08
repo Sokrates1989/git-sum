@@ -34,27 +34,10 @@ run_first_time_setup() {
         return 1
     fi
     
-    # Ask about autostart
-    echo ""
-    echo "[*] Autostart Configuration"
-    echo "--------------------------"
-    echo ""
-    echo "Would you like git-sum to run automatically when you log in?"
-    echo "This helps ensure your repos are always up to date."
-    echo ""
-    
-    read -p "Enable autostart? (y/N) " autostart_choice
-    
-    if [[ "$(echo "$autostart_choice" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
-        set_autostart "true"
-        install_autostart
-        echo "[OK] Autostart enabled!"
-    else
-        echo "[i] Autostart not enabled. You can enable it later with 'git-sum -as'"
-    fi
-    
     echo ""
     echo "[OK] Setup complete!"
+    echo ""
+    echo "You can configure autostart later with 'git-sum -as'"
     echo ""
     echo "You can now run:"
     echo "   git-sum          - Check all repos and pull if safe"
