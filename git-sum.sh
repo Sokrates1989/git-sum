@@ -159,6 +159,23 @@ if git fetch --quiet origin 2>/dev/null; then
     fi
 fi 2>/dev/null || true
 
+# === Show update status for all commands (except update mode itself) ===
+if [[ "$MODE" != "update" ]]; then
+    if [[ "$UPDATE_AVAILABLE" == true ]]; then
+        echo ""
+        echo "[*] git-sum - Git Repository Status Summary"
+        echo "================================================"
+        echo "[i] Update available! Run 'git-sum -u' to update."
+        echo ""
+    else
+        echo ""
+        echo "[*] git-sum - Git Repository Status Summary"
+        echo "================================================"
+        echo "[i] git-sum is up to date."
+        echo ""
+    fi
+fi
+
 # === Main logic ===
 case "$MODE" in
     update)
@@ -183,23 +200,6 @@ case "$MODE" in
     run)
         if ! check_first_time_setup; then
             exit 0
-        fi
-        
-        # Show update notification first, before any scanning
-        if [[ "$UPDATE_AVAILABLE" == true ]]; then
-            echo ""
-            echo "[*] git-sum - Git Repository Status Summary"
-            echo "================================================"
-            echo ""
-            echo "[i] Update available! Run 'git-sum -u' to update."
-            echo ""
-        else
-            echo ""
-            echo "[*] git-sum - Git Repository Status Summary"
-            echo "================================================"
-            echo ""
-            echo "[i] git-sum is up to date."
-            echo ""
         fi
         
         echo ""
