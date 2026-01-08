@@ -389,15 +389,23 @@ function Invoke-RepoScan {
             # Try to pull if safe and not dry run
             if (-not $DryRun -and $status.canPull) {
                 Write-Host "      [v] Pulling..." -ForegroundColor Yellow -NoNewline
-                $pullResult = Invoke-SafePull -RepoPath $repoPath
-                $status.pullResult = $pullResult
-                
-                if ($pullResult.success) {
-                    Write-Host " $($pullResult.message)" -ForegroundColor Green
-                    $status.status = "pulled"
-                    $status.message = $pullResult.message
-                } else {
+                try {
+                    $pullResult = Invoke-SafePull -RepoPath $repoPath
+                    $status.pullResult = $pullResult
+                    
+                    if ($pullResult.success) {
+                        Write-Host " $($pullResult.message)" -ForegroundColor Green
+                        $status.status = "pulled"
+                        $status.message = $pullResult.message
+                    } else {
+                        Write-Host " Failed" -ForegroundColor Red
+                    }
+                } catch {
                     Write-Host " Failed" -ForegroundColor Red
+                    $status.pullResult = @{
+                        success = $false
+                        message = "Pull failed: $($_.Exception.Message)"
+                    }
                 }
             }
             
