@@ -268,3 +268,15 @@ Write-Host "  git-sum -h           Show detailed help (--help)"
 Write-Host ""
 Write-Host "Tip: Run 'git-sum -h' for more detailed help and examples." -ForegroundColor Gray
 Write-Host ""
+
+# Show update notification at the end if update is available
+if ($updateAvailable) {
+    Write-Host ""
+    Write-Host "===============================================================" -ForegroundColor Yellow
+    Write-Host "[!] Update Available" -ForegroundColor Yellow
+    Write-Host "===============================================================" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "[W] A new version of git-sum is available!" -ForegroundColor Yellow
+    Write-Host "   Run 'git-sum -u' to update to the latest version." -ForegroundColor Gray
+    Write-Host ""
+}

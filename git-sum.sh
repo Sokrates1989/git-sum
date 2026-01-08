@@ -236,5 +236,17 @@ case "$MODE" in
         echo ""
         echo "Tip: Run 'git-sum -h' for more detailed help and examples."
         echo ""
+        
+        # Show update notification at the end if update is available
+        if [[ "$UPDATE_AVAILABLE" == true ]]; then
+            echo ""
+            echo "==============================================================="
+            echo "[!] Update Available"
+            echo "==============================================================="
+            echo ""
+            echo "⬆️  A new version of git-sum is available!"
+            echo "   Run 'git-sum -u' to update to the latest version."
+            echo ""
+        fi
         ;;
 esac
