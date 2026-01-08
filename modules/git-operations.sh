@@ -401,18 +401,25 @@ update_submodules() {
     # Commit submodule updates if any were successful
     if [[ "$updated_count" -gt 0 ]]; then
         echo "   📝 Committing submodule updates..."
-        if run_git_command -C "$repo_path" add . &>/dev/null && \
-           run_git_command -C "$repo_path" commit -m "Auto-update submodules ($updated_count updated)" &>/dev/null; then
-            echo "   ✅ Committed submodule updates"
-            echo ""
-            echo "⚠️  IMPORTANT: Submodules were automatically updated!"
-            echo "   🧪 Please test $repo_name to ensure it still works as expected"
-            echo "   📋 Review the submodule changes: git log --oneline -5"
-            return 0
+        # Stage changes first
+        run_git_command -C "$repo_path" add . &>/dev/null
+        # Check if there are changes to commit
+        if run_git_command -C "$repo_path" diff --cached --quiet &>/dev/null; then
+            # No staged changes, but submodules were updated
+            echo "   ℹ️  Submodules updated but no commit needed"
         else
-            echo "   ❌ Failed to commit submodule updates"
-            return 1
+            # There are changes to commit
+            if run_git_command -C "$repo_path" commit -m "Auto-update submodules ($updated_count updated)" &>/dev/null; then
+                echo "   ✅ Committed submodule updates"
+            else
+                echo "   ❌ Failed to commit submodule updates"
+                return 1
+            fi
         fi
+        echo ""
+        echo "⚠️  IMPORTANT: Submodules were automatically updated!"
+        echo "   🧪 Please test $repo_name to ensure it still works as expected"
+        echo "   📋 Review the submodule changes: git log --oneline -5"
     fi
     
     return 0

@@ -639,20 +639,28 @@ function Update-Submodules {
         if ($updatedCount -gt 0) {
             Write-Host "   📝 Committing submodule updates..." -ForegroundColor Yellow -NoNewline
             try {
+                # Stage changes first
                 $null = Run-GitCommand -Arguments "add", "." -WorkingDirectory $RepoPath -TimeoutSeconds 10
-                $null = Run-GitCommand -Arguments "commit", "-m", "Auto-update submodules ($updatedCount updated)" -WorkingDirectory $RepoPath -TimeoutSeconds 10
-                
+                # Check if there are changes to commit
+                $stagedChanges = Run-GitCommand -Arguments "diff", "--cached", "--quiet" -WorkingDirectory $RepoPath -TimeoutSeconds 10
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host " ✅ Committed submodule updates" -ForegroundColor Green
-                    Write-Host ""
-                    Write-Host "⚠️  IMPORTANT: Submodules were automatically updated!" -ForegroundColor Yellow
-                    Write-Host "   🧪 Please test $RepoName to ensure it still works as expected" -ForegroundColor Yellow
-                    Write-Host "   📋 Review the submodule changes: git log --oneline -5" -ForegroundColor Yellow
-                    return @{ success = $true; message = "Updated $updatedCount submodule(s)" }
+                    # No staged changes, but submodules were updated
+                    Write-Host " ℹ️  Submodules updated but no commit needed" -ForegroundColor Cyan
                 } else {
-                    Write-Host " ❌ Failed to commit submodule updates" -ForegroundColor Red
-                    return @{ success = $false; message = "Failed to commit submodule updates" }
+                    # There are changes to commit
+                    $null = Run-GitCommand -Arguments "commit", "-m", "Auto-update submodules ($updatedCount updated)" -WorkingDirectory $RepoPath -TimeoutSeconds 10
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host " ✅ Committed submodule updates" -ForegroundColor Green
+                    } else {
+                        Write-Host " ❌ Failed to commit submodule updates" -ForegroundColor Red
+                        return @{ success = $false; message = "Failed to commit submodule updates" }
+                    }
                 }
+                Write-Host ""
+                Write-Host "⚠️  IMPORTANT: Submodules were automatically updated!" -ForegroundColor Yellow
+                Write-Host "   🧪 Please test $RepoName to ensure it still works as expected" -ForegroundColor Yellow
+                Write-Host "   📋 Review the submodule changes: git log --oneline -5" -ForegroundColor Yellow
+                return @{ success = $true; message = "Updated $updatedCount submodule(s)" }
             } catch {
                 Write-Host " ❌ Failed to commit submodule updates" -ForegroundColor Red
                 return @{ success = $false; message = "Failed to commit submodule updates" }
