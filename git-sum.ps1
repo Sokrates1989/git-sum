@@ -222,6 +222,9 @@ $dryRun = $Status.IsPresent
 if ($updateAvailable) {
     Write-Host "[i] Update available! Run 'git-sum -u' to update." -ForegroundColor Yellow
     Write-Host ""
+} else {
+    Write-Host "[i] git-sum is up to date." -ForegroundColor Green
+    Write-Host ""
 }
 
 Write-Host ""

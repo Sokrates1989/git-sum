@@ -189,6 +189,9 @@ case "$MODE" in
         if [[ "$UPDATE_AVAILABLE" == true ]]; then
             echo "[i] Update available! Run 'git-sum -u' to update."
             echo ""
+        else
+            echo "[i] git-sum is up to date."
+            echo ""
         fi
         
         echo ""
