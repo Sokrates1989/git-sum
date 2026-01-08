@@ -230,6 +230,17 @@ function Get-RepoStatus {
             }
         }
         
+        # Check for submodule updates (only if repo is otherwise clean)
+        if (-not ($result.hasUncommittedChanges -or $result.hasUntrackedFiles) -and -not $anyDiverged) {
+            $submoduleCheck = Test-SubmoduleUpdates -RepoPath $RepoPath
+            if ($submoduleCheck.hasUpdates) {
+                $result.status = "submodule_updates"
+                $result.message = "Submodules have updates available"
+                $result.canPull = $true
+                return $result
+            }
+        }
+        
         # Determine overall status
         if (-not $result.hasRemote) {
             $result.status = "no_remote"
@@ -457,15 +468,29 @@ function Invoke-RepoScan {
             if (-not $DryRun -and $status.canPull) {
                 Write-Host "      [v] Pulling..." -ForegroundColor Yellow -NoNewline
                 try {
-                    $pullResult = Invoke-SafePull -RepoPath $repoPath
-                    Set-RepoStatusField -Status $status -Name "pullResult" -Value $pullResult
-                    
-                    if ($pullResult.success) {
-                        Write-Host " $($pullResult.message)" -ForegroundColor Green
-                        Set-RepoStatusField -Status $status -Name "status" -Value "pulled"
-                        Set-RepoStatusField -Status $status -Name "message" -Value $pullResult.message
+                    # Handle submodule updates specially
+                    if ($status.status -eq "submodule_updates") {
+                        $submoduleResult = Update-Submodules -RepoPath $repoPath -RepoName $status.name
+                        Set-RepoStatusField -Status $status -Name "pullResult" -Value $submoduleResult
+                        
+                        if ($submoduleResult.success) {
+                            Write-Host " $($submoduleResult.message)" -ForegroundColor Green
+                            Set-RepoStatusField -Status $status -Name "status" -Value "pulled"
+                            Set-RepoStatusField -Status $status -Name "message" -Value $submoduleResult.message
+                        } else {
+                            Write-Host " Failed" -ForegroundColor Red
+                        }
                     } else {
-                        Write-Host " Failed" -ForegroundColor Red
+                        $pullResult = Invoke-SafePull -RepoPath $repoPath
+                        Set-RepoStatusField -Status $status -Name "pullResult" -Value $pullResult
+                        
+                        if ($pullResult.success) {
+                            Write-Host " $($pullResult.message)" -ForegroundColor Green
+                            Set-RepoStatusField -Status $status -Name "status" -Value "pulled"
+                            Set-RepoStatusField -Status $status -Name "message" -Value $pullResult.message
+                        } else {
+                            Write-Host " Failed" -ForegroundColor Red
+                        }
                     }
                 } catch {
                     $errorMessage = $_.Exception.Message
@@ -482,4 +507,144 @@ function Invoke-RepoScan {
     }
     
     return $allResults
+}
+
+function Test-SubmoduleUpdates {
+    <#
+    .SYNOPSIS
+        Checks if a repository has submodules with updates available
+    .PARAMETER RepoPath
+        Path to the repository
+    .RETURNS
+        Object with hasSubmodules and hasUpdates properties
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$RepoPath
+    )
+    
+    $result = @{
+        hasSubmodules = $false
+        hasUpdates = $false
+        submodulesToUpdate = @()
+    }
+    
+    try {
+        # Check if repository has submodules
+        $submoduleStatus = Run-GitCommand -Arguments "submodule", "status" -WorkingDirectory $RepoPath -TimeoutSeconds 10
+        
+        if ($LASTEXITCODE -eq 0 -and $submoduleStatus) {
+            $result.hasSubmodules = $true
+            
+            # Parse submodule status to find updates
+            foreach ($line in $submoduleStatus -split "`n") {
+                if ($line -match '^[+-]') {
+                    $result.hasUpdates = $true
+                    # Extract submodule name (second field)
+                    $parts = $line -split '\s+'
+                    if ($parts.Length -ge 2) {
+                        $result.submodulesToUpdate += $parts[1]
+                    }
+                }
+            }
+        }
+    } catch {
+        # Ignore errors - assume no submodules
+    }
+    
+    return $result
+}
+
+function Update-Submodules {
+    <#
+    .SYNOPSIS
+        Updates submodules in a repository safely
+    .PARAMETER RepoPath
+        Path to the repository
+    .PARAMETER RepoName
+        Name of the repository for display
+    .RETURNS
+        Object with success and message properties
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$RepoPath,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$RepoName
+    )
+    
+    Write-Host ""
+    Write-Host "📦 Updating submodules in $RepoName..." -ForegroundColor Cyan
+    
+    try {
+        # Get submodules that need updates
+        $submoduleStatus = Run-GitCommand -Arguments "submodule", "status" -WorkingDirectory $RepoPath -TimeoutSeconds 10
+        $submodulesToUpdate = @()
+        
+        foreach ($line in $submoduleStatus -split "`n") {
+            if ($line -match '^[+-]') {
+                $parts = $line -split '\s+'
+                if ($parts.Length -ge 2) {
+                    $submodulesToUpdate += $parts[1]
+                }
+            }
+        }
+        
+        if ($submodulesToUpdate.Count -eq 0) {
+            Write-Host "   ℹ️  No submodule updates needed" -ForegroundColor Gray
+            return @{ success = $true; message = "No submodule updates needed" }
+        }
+        
+        $updatedCount = 0
+        $failedCount = 0
+        
+        foreach ($submodule in $submodulesToUpdate) {
+            Write-Host "   🔄 Updating $submodule..." -ForegroundColor Yellow -NoNewline
+            try {
+                $null = Run-GitCommand -Arguments "submodule", "update", "--remote", $submodule -WorkingDirectory $RepoPath -TimeoutSeconds 30
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host " ✅ Updated $submodule" -ForegroundColor Green
+                    $updatedCount++
+                } else {
+                    Write-Host " ❌ Failed to update $submodule" -ForegroundColor Red
+                    $failedCount++
+                }
+            } catch {
+                Write-Host " ❌ Failed to update $submodule" -ForegroundColor Red
+                $failedCount++
+            }
+        }
+        
+        # Commit submodule updates if any were successful
+        if ($updatedCount -gt 0) {
+            Write-Host "   📝 Committing submodule updates..." -ForegroundColor Yellow -NoNewline
+            try {
+                $null = Run-GitCommand -Arguments "add", "." -WorkingDirectory $RepoPath -TimeoutSeconds 10
+                $null = Run-GitCommand -Arguments "commit", "-m", "Auto-update submodules ($updatedCount updated)" -WorkingDirectory $RepoPath -TimeoutSeconds 10
+                
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host " ✅ Committed submodule updates" -ForegroundColor Green
+                    Write-Host ""
+                    Write-Host "⚠️  IMPORTANT: Submodules were automatically updated!" -ForegroundColor Yellow
+                    Write-Host "   🧪 Please test $RepoName to ensure it still works as expected" -ForegroundColor Yellow
+                    Write-Host "   📋 Review the submodule changes: git log --oneline -5" -ForegroundColor Yellow
+                    return @{ success = $true; message = "Updated $updatedCount submodule(s)" }
+                } else {
+                    Write-Host " ❌ Failed to commit submodule updates" -ForegroundColor Red
+                    return @{ success = $false; message = "Failed to commit submodule updates" }
+                }
+            } catch {
+                Write-Host " ❌ Failed to commit submodule updates" -ForegroundColor Red
+                return @{ success = $false; message = "Failed to commit submodule updates" }
+            }
+        }
+        
+        return @{ success = $true; message = "No submodule updates were needed" }
+        
+    } catch {
+        $errorMessage = $_.Exception.Message
+        Write-Host "   ❌ Error updating submodules: $errorMessage" -ForegroundColor Red
+        return @{ success = $false; message = "Error updating submodules: $errorMessage" }
+    }
 }

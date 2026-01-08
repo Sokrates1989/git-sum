@@ -36,6 +36,7 @@ function Show-Summary {
     $diverged = @($Results | Where-Object { $_.status -eq "diverged" })
     $dirty = @($Results | Where-Object { $_.status -eq "dirty" })
     $noRemote = @($Results | Where-Object { $_.status -eq "no_remote" })
+    $submoduleUpdates = @($Results | Where-Object { $_.status -eq "submodule_updates" })
     $errors = @($Results | Where-Object { $_.status -eq "error" -or $_.status -eq "not_git" })
     
     Write-Host ""
@@ -70,6 +71,9 @@ function Show-Summary {
     if ($noRemote.Count -gt 0) {
         Write-Host "   [-] No remote:   $($noRemote.Count)" -ForegroundColor Gray
     }
+    if ($submoduleUpdates.Count -gt 0) {
+        Write-Host "   [📦] Submodules:   $($submoduleUpdates.Count)" -ForegroundColor Cyan
+    }
     if ($errors.Count -gt 0) {
         Write-Host "   [X] Errors:      $($errors.Count)" -ForegroundColor Red
     }
@@ -81,6 +85,7 @@ function Show-Summary {
     $needsAttention += $diverged
     $needsAttention += $dirty
     $needsAttention += $noRemote
+    $needsAttention += $submoduleUpdates
     $needsAttention += $errors
     
     if ($needsAttention.Count -gt 0) {
@@ -129,6 +134,7 @@ function Show-RepoAttention {
         "diverged" { "[!]" }
         "dirty" { "[~]" }
         "no_remote" { "[-]" }
+        "submodule_updates" { "[📦]" }
         "error" { "[X]" }
         "not_git" { "[?]" }
         default { "*" }
@@ -141,6 +147,9 @@ function Show-RepoAttention {
         Write-Host "      Status: $($Repo.message) (on branch: $($Repo.currentBranch))" -ForegroundColor Gray
     } elseif ($Repo.status -eq "no_remote") {
         Write-Host "      Status: $($Repo.message)" -ForegroundColor Gray
+    } elseif ($Repo.status -eq "submodule_updates") {
+        Write-Host "      Status: $($Repo.message)" -ForegroundColor Gray
+        Write-Host "      🔄 Will auto-update submodules when pulling" -ForegroundColor DarkGray
     } elseif ($Repo.status -eq "error") {
         Write-Host "      Error:  $($Repo.message)" -ForegroundColor Red
     } else {
