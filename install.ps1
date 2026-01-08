@@ -86,44 +86,42 @@ if ($CreateShortcut -eq "y" -or $CreateShortcut -eq "Y") {
     }
 }
 
-# Step 5: Add to CMD path (optional)
+# Step 5: Add to system PATH
 Write-Host ""
-Write-Host "To use 'git-sum' in CMD (Command Prompt), the script directory needs to be in PATH." -ForegroundColor Cyan
-$AddToPath = Read-Host "Add git-sum to system PATH for CMD access? (y/N)"
-if ($AddToPath -eq "y" -or $AddToPath -eq "Y") {
-    # Create a batch wrapper
-    $BatchWrapper = Join-Path $ScriptDir "git-sum.cmd"
-    $BatchLines = @(
-        "@echo off",
-        "powershell.exe -ExecutionPolicy Bypass -File ""%~dp0git-sum.ps1"" %*"
-    )
-    $BatchLines | Set-Content -Path $BatchWrapper -Encoding ASCII
-    
-    # Add to user PATH
-    try {
-        $CurrentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+Write-Host "Adding git-sum to system PATH for global access..." -ForegroundColor Cyan
+
+# Create a batch wrapper
+$BatchWrapper = Join-Path $ScriptDir "git-sum.cmd"
+$BatchLines = @(
+    "@echo off",
+    "powershell.exe -ExecutionPolicy Bypass -File ""%~dp0git-sum.ps1"" %*"
+)
+$BatchLines | Set-Content -Path $BatchWrapper -Encoding ASCII
+
+# Add to user PATH
+try {
+    $CurrentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
         if ($CurrentPath -notlike "*$ScriptDir*") {
             $NewPath = "$CurrentPath;$ScriptDir"
             [Environment]::SetEnvironmentVariable("PATH", $NewPath, "User")
             Write-Host "[OK] Added git-sum to user PATH." -ForegroundColor Green
-            Write-Host "   Restart your terminal for changes to take effect." -ForegroundColor Yellow
         } else {
             Write-Host "[i] git-sum directory already in PATH." -ForegroundColor Gray
         }
     } catch {
         Write-Host "[WARN] Could not update PATH: $_" -ForegroundColor Yellow
     }
-}
 
 Write-Host ""
 Write-Host "===============================================================" -ForegroundColor Cyan
 Write-Host "[OK] Installation complete!" -ForegroundColor Green
 Write-Host ""
-Write-Host "Usage (after restarting terminal):" -ForegroundColor White
+Write-Host "Usage:" -ForegroundColor White
 Write-Host "  git-sum           - Check all repos and pull if safe" -ForegroundColor Gray
 Write-Host "  git-sum -s        - Show status without pulling (dry run)" -ForegroundColor Gray
 Write-Host "  git-sum -a        - Add more folders to watch" -ForegroundColor Gray
 Write-Host "  git-sum -c        - Open configuration editor" -ForegroundColor Gray
+Write-Host "  git-sum -u        - Update to latest version" -ForegroundColor Gray
 Write-Host "  git-sum -h        - Show help" -ForegroundColor Gray
 Write-Host ""
 Write-Host "First run will guide you through initial setup." -ForegroundColor Yellow

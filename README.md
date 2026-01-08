@@ -68,7 +68,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Sokrates1989/git-sum/m
 ```
 
 ```powershell
-Set-Location $OriginalDir; Remove-Item -Recurse -Force $TempDir
+$env:PATH = [Environment]::GetEnvironmentVariable("PATH", "User"); Set-Location $OriginalDir; Remove-Item -Recurse -Force $TempDir; git-sum
 ```
 
 ---
