@@ -218,5 +218,23 @@ case "$MODE" in
         
         # Display summary
         show_summary "$DRY_RUN"
+        
+        # Show help information after the run (especially useful for autostart users)
+        echo ""
+        echo "==============================================================="
+        echo "[*] Quick Reference"
+        echo "==============================================================="
+        echo ""
+        echo "Usage:"
+        echo "  git-sum              Normal run - check all repos and pull if safe"
+        echo "  git-sum -a           Add more folders to watch (--add)"
+        echo "  git-sum -s           Dry run - show status without pulling (--status)"
+        echo "  git-sum -c           Open configuration editor (--config)"
+        echo "  git-sum -as          Configure autostart settings (--autostart)"
+        echo "  git-sum -u           Update to latest version (--update)"
+        echo "  git-sum -h           Show detailed help (--help)"
+        echo ""
+        echo "Tip: Run 'git-sum -h' for more detailed help and examples."
+        echo ""
         ;;
 esac

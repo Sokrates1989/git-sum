@@ -250,3 +250,21 @@ $results = Invoke-RepoScan -DryRun:$dryRun
 
 # Display summary
 Show-Summary -Results $results -DryRun:$dryRun
+
+# Show help information after the run (especially useful for autostart users)
+Write-Host ""
+Write-Host "===============================================================" -ForegroundColor Cyan
+Write-Host "[*] Quick Reference" -ForegroundColor Cyan
+Write-Host "===============================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Usage:" -ForegroundColor Yellow
+Write-Host "  git-sum              Normal run - check all repos and pull if safe"
+Write-Host "  git-sum -a           Add more folders to watch (--add)"
+Write-Host "  git-sum -s           Dry run - show status without pulling (--status)"
+Write-Host "  git-sum -c           Open configuration editor (--config)"
+Write-Host "  git-sum -as          Configure autostart settings (--autostart)"
+Write-Host "  git-sum -u           Update to latest version (--update)"
+Write-Host "  git-sum -h           Show detailed help (--help)"
+Write-Host ""
+Write-Host "Tip: Run 'git-sum -h' for more detailed help and examples." -ForegroundColor Gray
+Write-Host ""
