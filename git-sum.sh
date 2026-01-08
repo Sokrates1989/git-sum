@@ -185,15 +185,15 @@ case "$MODE" in
             exit 0
         fi
         
-        echo ""
-        echo "[*] git-sum - Scanning repositories..."
-        echo "======================================"
-        
-        # Show update notification if available
+        # Show update notification first, before any scanning
         if [[ "$UPDATE_AVAILABLE" == true ]]; then
             echo "[i] Update available! Run 'git-sum -u' to update."
             echo ""
         fi
+        
+        echo ""
+        echo "[*] git-sum - Scanning repositories..."
+        echo "======================================"
         
         if [[ "$DRY_RUN" == true ]]; then
             echo "   (Dry run mode - no changes will be made)"

@@ -218,15 +218,15 @@ if (-not (Test-FirstTimeSetup)) {
 # Normal run or status mode
 $dryRun = $Status.IsPresent
 
-Write-Host ""
-Write-Host "[*] git-sum - Scanning repositories..." -ForegroundColor Cyan
-Write-Host "======================================" -ForegroundColor Cyan
-
-# Show update notification if available
+# Show update notification first, before any scanning
 if ($updateAvailable) {
     Write-Host "[i] Update available! Run 'git-sum -u' to update." -ForegroundColor Yellow
     Write-Host ""
 }
+
+Write-Host ""
+Write-Host "[*] git-sum - Scanning repositories..." -ForegroundColor Cyan
+Write-Host "======================================" -ForegroundColor Cyan
 
 if ($dryRun) {
     Write-Host "   (Dry run mode - no changes will be made)" -ForegroundColor Yellow
