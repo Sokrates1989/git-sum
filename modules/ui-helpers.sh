@@ -18,7 +18,7 @@ show_summary() {
     fi
     
     # Count by status
-    local up_to_date=0 pulled=0 behind=0 ahead=0 diverged=0 dirty=0 no_remote=0 errors=0
+    local up_to_date=0 pulled=0 behind=0 ahead=0 diverged=0 dirty=0 no_remote=0 submodule_updates=0 errors=0
     
     for i in "${!REPO_STATUSES[@]}"; do
         case "${REPO_STATUSES[$i]}" in
@@ -29,7 +29,8 @@ show_summary() {
             "diverged") ((diverged++)) ;;
             "dirty") ((dirty++)) ;;
             "no_remote") ((no_remote++)) ;;
-            "error"|"not_git") ((errors++)) ;;
+            "submodule_updates") ((submodule_updates++)) ;;
+            "error") ((errors++)) ;;
         esac
     done
     
@@ -51,10 +52,11 @@ show_summary() {
     [[ "$diverged" -gt 0 ]] && echo "   ⚠️ Diverged:    $diverged"
     [[ "$dirty" -gt 0 ]] && echo "   📝 Dirty:       $dirty"
     [[ "$no_remote" -gt 0 ]] && echo "   🔗 No remote:   $no_remote"
+    [[ "$submodule_updates" -gt 0 ]] && echo "   📦 Submodules:   $submodule_updates"
     [[ "$errors" -gt 0 ]] && echo "   ❌ Errors:      $errors"
     
     # Show repos that need attention
-    local needs_attention=$((behind + ahead + diverged + dirty + no_remote + errors))
+    local needs_attention=$((behind + ahead + diverged + dirty + no_remote + submodule_updates + errors))
     
     if [[ "$needs_attention" -gt 0 ]]; then
         echo ""
@@ -66,7 +68,7 @@ show_summary() {
         for i in "${!REPO_STATUSES[@]}"; do
             local status="${REPO_STATUSES[$i]}"
             case "$status" in
-                "behind"|"ahead"|"diverged"|"dirty"|"no_remote"|"error"|"not_git")
+                "behind"|"ahead"|"diverged"|"dirty"|"no_remote"|"submodule_updates"|"error"|"not_git")
                     show_repo_attention "$i" "$dry_run"
                     ;;
             esac
@@ -99,6 +101,7 @@ show_repo_attention() {
         "diverged") icon="⚠️" ;;
         "dirty") icon="📝" ;;
         "no_remote") icon="🔗" ;;
+        "submodule_updates") icon="📦" ;;
         "error") icon="❌" ;;
         "not_git") icon="❓" ;;
         *) icon="❓" ;;
@@ -113,6 +116,9 @@ show_repo_attention() {
         echo "      Status: ${REPO_MESSAGES[$index]}"
     elif [[ "$status" == "error" ]]; then
         echo "      Error:  ${REPO_MESSAGES[$index]}"
+    elif [[ "$status" == "submodule_updates" ]]; then
+        echo "      Status: ${REPO_MESSAGES[$index]}"
+        echo "      🔄 Will auto-update submodules when pulling"
     else
         # Show status for all branches that need attention
         cd "${REPO_PATHS[$index]}" || return
@@ -191,6 +197,9 @@ get_fix_suggestion() {
             ;;
         "dirty")
             echo "Check repository status: cd \"$path\" && git status"
+            ;;
+        "submodule_updates")
+            echo "Auto-update submodules: cd \"$path\" && git-sum"
             ;;
         "no_remote")
             echo "Add remote: cd \"$path\" && git remote add origin <url>"

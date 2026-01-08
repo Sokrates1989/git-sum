@@ -13,6 +13,7 @@ declare -a REPO_STATUSES
 declare -a REPO_MESSAGES
 declare -a REPO_BRANCHES
 declare -a REPO_CAN_PULL
+declare -a REPO_HAS_SUBMODULES
 
 # Reset results arrays
 reset_results() {
@@ -23,6 +24,7 @@ reset_results() {
     REPO_MESSAGES=()
     REPO_BRANCHES=()
     REPO_CAN_PULL=()
+    REPO_HAS_SUBMODULES=()
 }
 
 # Run git command non-interactively with a hard timeout
@@ -123,8 +125,20 @@ get_repo_status() {
     if [[ "$has_remote" == false ]]; then
         REPO_STATUSES[$index]="no_remote"
         REPO_MESSAGES[$index]="No remote configured"
-        REPO_CAN_PULL[$index]="false"
-    elif [[ "$has_changes" == true ]]; then
+    fi
+    
+    # Check for submodule updates (only if repo is otherwise clean)
+    if [[ "$has_changes" == false && "$any_diverged" -eq 0 ]]; then
+        check_submodules "$repo_path" "$index"
+        # If submodules have updates, that becomes the primary status
+        if [[ "${REPO_STATUSES[$index]}" == "submodule_updates" ]]; then
+            REPO_CAN_PULL[$index]="true"  # Allow pulling to update submodules
+            return 0
+        fi
+    fi
+    
+    # Set final status based on branch analysis
+    if [[ "$has_changes" == true ]]; then
         REPO_STATUSES[$index]="dirty"
         REPO_MESSAGES[$index]="Has uncommitted changes"
         REPO_CAN_PULL[$index]="false"
@@ -204,6 +218,20 @@ do_safe_pull() {
         run_git_command checkout "$original_branch" --quiet
     fi
     
+    # Check and update submodules if this was a submodule update repo
+    if [[ "${REPO_STATUSES[$index]}" == "submodule_updates" ]]; then
+        local repo_name="${REPO_NAMES[$index]}"
+        if update_submodules "$repo_path" "$repo_name"; then
+            REPO_STATUSES[$index]="pulled"
+            REPO_MESSAGES[$index]="Updated submodules"
+            return 0
+        else
+            REPO_STATUSES[$index]="submodule_updates"
+            REPO_MESSAGES[$index]="Failed to update submodules"
+            return 1
+        fi
+    fi
+    
     if [[ "$fail_count" -eq 0 ]]; then
         REPO_STATUSES[$index]="pulled"
         REPO_MESSAGES[$index]="Updated $pulled_count branch(es)"
@@ -225,6 +253,7 @@ get_status_icon() {
         "diverged") echo "⚠️" ;;
         "dirty") echo "📝" ;;
         "no_remote") echo "🔗" ;;
+        "submodule_updates") echo "📦" ;;
         *) echo "❓" ;;
     esac
 }
@@ -281,4 +310,97 @@ run_repo_scan() {
             fi
         done
     done < <(get_all_folders)
+}
+
+# Check if repository has submodules with updates available
+check_submodules() {
+    local repo_path=$1
+    local index=$2
+    
+    # Check if repository has submodules
+    if ! run_git_command -C "$repo_path" submodule status &>/dev/null; then
+        REPO_HAS_SUBMODULES[$index]=false
+        return 0
+    fi
+    
+    # Get submodule status
+    local submodule_status
+    submodule_status=$(run_git_command -C "$repo_path" submodule status 2>/dev/null)
+    
+    if [[ -z "$submodule_status" ]]; then
+        REPO_HAS_SUBMODULES[$index]=false
+        return 0
+    fi
+    
+    REPO_HAS_SUBMODULES[$index]=true
+    
+    # Check if any submodules have new commits
+    local has_updates=false
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[+-] ]]; then
+            has_updates=true
+            break
+        fi
+    done <<< "$submodule_status"
+    
+    if [[ "$has_updates" == true ]]; then
+        REPO_STATUSES[$index]="submodule_updates"
+        REPO_MESSAGES[$index]="Submodules have updates available"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Update submodules safely
+update_submodules() {
+    local repo_path=$1
+    local repo_name=$2
+    
+    echo ""
+    echo "📦 Updating submodules in $repo_name..."
+    
+    # Get list of submodules that need updates
+    local submodules_to_update
+    submodules_to_update=$(run_git_command -C "$repo_path" submodule status 2>/dev/null | grep '^[+-]' | awk '{print $2}')
+    
+    if [[ -z "$submodules_to_update" ]]; then
+        echo "   ℹ️  No submodule updates needed"
+        return 0
+    fi
+    
+    local updated_count=0
+    local failed_count=0
+    
+    while IFS= read -r submodule; do
+        if [[ -n "$submodule" ]]; then
+            echo "   🔄 Updating $submodule..."
+            if run_git_command -C "$repo_path" submodule update --remote "$submodule" &>/dev/null; then
+                echo "   ✅ Updated $submodule"
+                ((updated_count++))
+            else
+                echo "   ❌ Failed to update $submodule"
+                ((failed_count++))
+            fi
+        fi
+    done <<< "$submodules_to_update"
+    
+    # Commit submodule updates if any were successful
+    if [[ "$updated_count" -gt 0 ]]; then
+        echo "   📝 Committing submodule updates..."
+        if run_git_command -C "$repo_path" add . &>/dev/null && \
+           run_git_command -C "$repo_path" commit -m "Auto-update submodules ($updated_count updated)" &>/dev/null; then
+            echo "   ✅ Committed submodule updates"
+            echo ""
+            echo "⚠️  IMPORTANT: Submodules were automatically updated!"
+            echo "   🧪 Please test $repo_name to ensure it still works as expected"
+            echo "   📋 Review the submodule changes: git log --oneline -5"
+            return 0
+        else
+            echo "   ❌ Failed to commit submodule updates"
+            return 1
+        fi
+    fi
+    
+    return 0
 }
