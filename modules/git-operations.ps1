@@ -52,15 +52,15 @@ function Run-GitCommand {
         $global:LASTEXITCODE = $process.ExitCode
         
         $output = $process.StandardOutput.ReadToEnd()
-        $error = $process.StandardError.ReadToEnd()
+        $stdErr = $process.StandardError.ReadToEnd()
         
         $lines = @()
         if ($output) { 
             $splitLines = $output -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_.ToString() }
             if ($splitLines) { $lines += $splitLines }
         }
-        if ($error) { 
-            $splitError = $error -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_.ToString() }
+        if ($stdErr) { 
+            $splitError = $stdErr -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_.ToString() }
             if ($splitError) { $lines += $splitError }
         }
         
@@ -594,7 +594,7 @@ function Update-Submodules {
     )
     
     Write-Host ""
-    Write-Host "📦 Updating submodules in $RepoName..." -ForegroundColor Cyan
+    Write-Host "[submodules] Updating submodules in $RepoName..." -ForegroundColor Cyan
     
     try {
         # Get submodules that need updates
@@ -611,7 +611,7 @@ function Update-Submodules {
         }
         
         if ($submodulesToUpdate.Count -eq 0) {
-            Write-Host "   ℹ️  No submodule updates needed" -ForegroundColor Gray
+            Write-Host "   [i] No submodule updates needed" -ForegroundColor Gray
             return @{ success = $true; message = "No submodule updates needed" }
         }
         
@@ -619,25 +619,25 @@ function Update-Submodules {
         $failedCount = 0
         
         foreach ($submodule in $submodulesToUpdate) {
-            Write-Host "   🔄 Updating $submodule..." -ForegroundColor Yellow -NoNewline
+            Write-Host "   [>] Updating $submodule..." -ForegroundColor Yellow -NoNewline
             try {
                 $null = Run-GitCommand -Arguments "submodule", "update", "--remote", $submodule -WorkingDirectory $RepoPath -TimeoutSeconds 30
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host " ✅ Updated $submodule" -ForegroundColor Green
+                    Write-Host " OK" -ForegroundColor Green
                     $updatedCount++
                 } else {
-                    Write-Host " ❌ Failed to update $submodule" -ForegroundColor Red
+                    Write-Host " FAILED" -ForegroundColor Red
                     $failedCount++
                 }
             } catch {
-                Write-Host " ❌ Failed to update $submodule" -ForegroundColor Red
+                Write-Host " FAILED" -ForegroundColor Red
                 $failedCount++
             }
         }
         
         # Commit submodule updates if any were successful
         if ($updatedCount -gt 0) {
-            Write-Host "   📝 Committing submodule updates..." -ForegroundColor Yellow -NoNewline
+            Write-Host "   [>] Committing submodule updates..." -ForegroundColor Yellow -NoNewline
             try {
                 # Stage changes first
                 $null = Run-GitCommand -Arguments "add", "." -WorkingDirectory $RepoPath -TimeoutSeconds 10
@@ -645,24 +645,24 @@ function Update-Submodules {
                 $stagedChanges = Run-GitCommand -Arguments "diff", "--cached", "--quiet" -WorkingDirectory $RepoPath -TimeoutSeconds 10
                 if ($LASTEXITCODE -eq 0) {
                     # No staged changes, but submodules were updated
-                    Write-Host " ℹ️  Submodules updated but no commit needed" -ForegroundColor Cyan
+                    Write-Host " [i] Submodules updated but no commit needed" -ForegroundColor Cyan
                 } else {
                     # There are changes to commit
                     $null = Run-GitCommand -Arguments "commit", "-m", "Auto-update submodules ($updatedCount updated)" -WorkingDirectory $RepoPath -TimeoutSeconds 10
                     if ($LASTEXITCODE -eq 0) {
-                        Write-Host " ✅ Committed submodule updates" -ForegroundColor Green
+                        Write-Host " OK" -ForegroundColor Green
                     } else {
-                        Write-Host " ❌ Failed to commit submodule updates" -ForegroundColor Red
+                        Write-Host " FAILED" -ForegroundColor Red
                         return @{ success = $false; message = "Failed to commit submodule updates" }
                     }
                 }
                 Write-Host ""
-                Write-Host "⚠️  IMPORTANT: Submodules were automatically updated!" -ForegroundColor Yellow
-                Write-Host "   🧪 Please test $RepoName to ensure it still works as expected" -ForegroundColor Yellow
-                Write-Host "   📋 Review the submodule changes: git log --oneline -5" -ForegroundColor Yellow
+                Write-Host "[!] IMPORTANT: Submodules were automatically updated!" -ForegroundColor Yellow
+                Write-Host "   Please test $RepoName to ensure it still works as expected" -ForegroundColor Yellow
+                Write-Host "   Review the submodule changes: git log --oneline -5" -ForegroundColor Yellow
                 return @{ success = $true; message = "Updated $updatedCount submodule(s)" }
             } catch {
-                Write-Host " ❌ Failed to commit submodule updates" -ForegroundColor Red
+                Write-Host " FAILED" -ForegroundColor Red
                 return @{ success = $false; message = "Failed to commit submodule updates" }
             }
         }
@@ -671,7 +671,7 @@ function Update-Submodules {
         
     } catch {
         $errorMessage = $_.Exception.Message
-        Write-Host "   ❌ Error updating submodules: $errorMessage" -ForegroundColor Red
-        return @{ success = $false; message = "Error updating submodules: $errorMessage" }
+        Write-Host ("   Error updating submodules: " + $errorMessage) -ForegroundColor Red
+        return @{ success = $false; message = ('Error updating submodules: ' + $errorMessage) }
     }
 }

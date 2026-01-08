@@ -72,7 +72,7 @@ function Show-Summary {
         Write-Host "   [-] No remote:   $($noRemote.Count)" -ForegroundColor Gray
     }
     if ($submoduleUpdates.Count -gt 0) {
-        Write-Host "   [📦] Submodules:   $($submoduleUpdates.Count)" -ForegroundColor Cyan
+        Write-Host "   [S] Submodules:   $($submoduleUpdates.Count)" -ForegroundColor Cyan
     }
     if ($errors.Count -gt 0) {
         Write-Host "   [X] Errors:      $($errors.Count)" -ForegroundColor Red
@@ -134,7 +134,7 @@ function Show-RepoAttention {
         "diverged" { "[!]" }
         "dirty" { "[~]" }
         "no_remote" { "[-]" }
-        "submodule_updates" { "[📦]" }
+        "submodule_updates" { "[S]" }
         "error" { "[X]" }
         "not_git" { "[?]" }
         default { "*" }
@@ -149,7 +149,7 @@ function Show-RepoAttention {
         Write-Host "      Status: $($Repo.message)" -ForegroundColor Gray
     } elseif ($Repo.status -eq "submodule_updates") {
         Write-Host "      Status: $($Repo.message)" -ForegroundColor Gray
-        Write-Host "      🔄 Will auto-update submodules when pulling" -ForegroundColor DarkGray
+        Write-Host "      Will auto-update submodules when pulling" -ForegroundColor DarkGray
     } elseif ($Repo.status -eq "error") {
         Write-Host "      Error:  $($Repo.message)" -ForegroundColor Red
     } else {
