@@ -219,13 +219,13 @@ do_safe_pull() {
 get_status_icon() {
     local status=$1
     case "$status" in
-        "up_to_date"|"pulled") echo "[OK]" ;;
-        "behind") echo "[v]" ;;
-        "ahead") echo "[^]" ;;
-        "diverged") echo "[!]" ;;
-        "dirty") echo "[~]" ;;
-        "no_remote") echo "[-]" ;;
-        *) echo "[?]" ;;
+        "up_to_date"|"pulled") echo "✅" ;;
+        "behind") echo "⬇️" ;;
+        "ahead") echo "⬆️" ;;
+        "diverged") echo "⚠️" ;;
+        "dirty") echo "📝" ;;
+        "no_remote") echo "🔗" ;;
+        *) echo "❓" ;;
     esac
 }
 

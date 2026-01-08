@@ -44,14 +44,14 @@ show_summary() {
     echo ""
     
     # Status breakdown
-    [[ "$pulled" -gt 0 ]] && echo "   [OK] Pulled:      $pulled"
-    [[ "$up_to_date" -gt 0 ]] && echo "   [OK] Up to date:  $up_to_date"
-    [[ "$behind" -gt 0 ]] && echo "   [v] Behind:      $behind"
-    [[ "$ahead" -gt 0 ]] && echo "   [^] Ahead:       $ahead"
-    [[ "$diverged" -gt 0 ]] && echo "   [!] Diverged:    $diverged"
-    [[ "$dirty" -gt 0 ]] && echo "   [~] Dirty:       $dirty"
-    [[ "$no_remote" -gt 0 ]] && echo "   [-] No remote:   $no_remote"
-    [[ "$errors" -gt 0 ]] && echo "   [X] Errors:      $errors"
+    [[ "$pulled" -gt 0 ]] && echo "   ✅ Pulled:      $pulled"
+    [[ "$up_to_date" -gt 0 ]] && echo "   ✅ Up to date:  $up_to_date"
+    [[ "$behind" -gt 0 ]] && echo "   ⬇️ Behind:      $behind"
+    [[ "$ahead" -gt 0 ]] && echo "   ⬆️ Ahead:       $ahead"
+    [[ "$diverged" -gt 0 ]] && echo "   ⚠️ Diverged:    $diverged"
+    [[ "$dirty" -gt 0 ]] && echo "   📝 Dirty:       $dirty"
+    [[ "$no_remote" -gt 0 ]] && echo "   🔗 No remote:   $no_remote"
+    [[ "$errors" -gt 0 ]] && echo "   ❌ Errors:      $errors"
     
     # Show repos that need attention
     local needs_attention=$((behind + ahead + diverged + dirty + no_remote + errors))
@@ -94,14 +94,14 @@ show_repo_attention() {
     local icon
     
     case "$status" in
-        "behind") icon="[v]" ;;
-        "ahead") icon="[^]" ;;
-        "diverged") icon="[!]" ;;
-        "dirty") icon="[~]" ;;
-        "no_remote") icon="[-]" ;;
-        "error") icon="[X]" ;;
-        "not_git") icon="[?]" ;;
-        *) icon="*" ;;
+        "behind") icon="⬇️" ;;
+        "ahead") icon="⬆️" ;;
+        "diverged") icon="⚠️" ;;
+        "dirty") icon="📝" ;;
+        "no_remote") icon="🔗" ;;
+        "error") icon="❌" ;;
+        "not_git") icon="❓" ;;
+        *) icon="❓" ;;
     esac
     
     echo "   $icon ${REPO_NAMES[$index]}"
