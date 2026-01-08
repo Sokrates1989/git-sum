@@ -401,10 +401,11 @@ function Invoke-RepoScan {
                         Write-Host " Failed" -ForegroundColor Red
                     }
                 } catch {
+                    $errorMessage = $_.Exception.Message
                     Write-Host " Failed" -ForegroundColor Red
                     $status.pullResult = @{
                         success = $false
-                        message = "Pull failed: $($_.Exception.Message)"
+                        message = "Pull failed: $errorMessage"
                     }
                 }
             }

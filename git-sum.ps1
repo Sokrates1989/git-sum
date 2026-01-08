@@ -170,6 +170,21 @@ if ($Update) {
     exit 0
 }
 
+# Check for updates (non-intrusive)
+$updateAvailable = $false
+try {
+    Push-Location $RootDir
+    git fetch --quiet 2>$null
+    $diff = git diff HEAD..origin/HEAD --quiet 2>$null
+    if ($LASTEXITCODE -eq 1) {
+        $updateAvailable = $true
+    }
+    Pop-Location
+} catch {
+    # Ignore update check failures
+    Pop-Location -ErrorAction SilentlyContinue
+}
+
 # Ensure config directory exists
 if (-not (Test-Path $ConfigDir)) {
     New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
@@ -207,6 +222,12 @@ $dryRun = $Status.IsPresent
 Write-Host ""
 Write-Host "[*] git-sum - Scanning repositories..." -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
+
+# Show update notification if available
+if ($updateAvailable) {
+    Write-Host "[i] Update available! Run 'git-sum -u' to update." -ForegroundColor Yellow
+    Write-Host ""
+}
 
 if ($dryRun) {
     Write-Host "   (Dry run mode - no changes will be made)" -ForegroundColor Yellow
