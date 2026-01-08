@@ -220,9 +220,17 @@ $dryRun = $Status.IsPresent
 
 # Show update notification first, before any scanning
 if ($updateAvailable) {
+    Write-Host ""
+    Write-Host "[*] git-sum - Git Repository Status Summary" -ForegroundColor Cyan
+    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Host ""
     Write-Host "[i] Update available! Run 'git-sum -u' to update." -ForegroundColor Yellow
     Write-Host ""
 } else {
+    Write-Host ""
+    Write-Host "[*] git-sum - Git Repository Status Summary" -ForegroundColor Cyan
+    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Host ""
     Write-Host "[i] git-sum is up to date." -ForegroundColor Green
     Write-Host ""
 }
