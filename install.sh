@@ -76,7 +76,7 @@ fi
 if [[ "$OSTYPE" == darwin* ]]; then
     echo ""
     read -p "Create Desktop shortcut? (y/N): " create_shortcut
-    if [[ "${create_shortcut,,}" == "y" ]]; then
+    if [[ "$(echo "$create_shortcut" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
         DESKTOP_DIR="$HOME/Desktop"
         COMMAND_FILE="${DESKTOP_DIR}/git-sum.command"
         
