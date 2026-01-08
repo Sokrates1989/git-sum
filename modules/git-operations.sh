@@ -14,6 +14,7 @@ declare -a REPO_MESSAGES
 declare -a REPO_BRANCHES
 declare -a REPO_CAN_PULL
 declare -a REPO_HAS_SUBMODULES
+declare -a REPO_ORIGINAL_BRANCHES  # Store original branch for auto-pull
 
 # Reset results arrays
 reset_results() {
@@ -25,6 +26,7 @@ reset_results() {
     REPO_BRANCHES=()
     REPO_CAN_PULL=()
     REPO_HAS_SUBMODULES=()
+    REPO_ORIGINAL_BRANCHES=()
 }
 
 # Run git command non-interactively with a hard timeout
@@ -75,6 +77,7 @@ get_repo_status() {
         current_branch="(detached)"
     fi
     REPO_BRANCHES[$index]="$current_branch"
+    REPO_ORIGINAL_BRANCHES[$index]="$current_branch"  # Store for auto-pull restoration
     
     # Check for uncommitted changes
     local status has_changes=false has_untracked=false has_only_submodule_changes=false
@@ -183,13 +186,69 @@ do_safe_pull() {
     
     cd "$repo_path" || return 1
     
-    local original_branch
-    original_branch=$(run_git_command rev-parse --abbrev-ref HEAD 2>/dev/null)
+    local original_branch="${REPO_ORIGINAL_BRANCHES[$index]}"
+    local repo_status="${REPO_STATUSES[$index]}"
     
     local pulled_count=0
     local total_behind=0
     local fail_count=0
     
+    # Handle 'behind' repos with auto-pull logic
+    if [[ "$repo_status" == "behind" ]]; then
+        # Get branches that are behind
+        while IFS='|' read -r branch upstream; do
+            [[ -z "$branch" || -z "$upstream" ]] && continue
+            
+            local behind
+            behind=$(run_git_command rev-list --count "$branch..$upstream" 2>/dev/null || echo 0)
+            
+            if [[ "$behind" -gt 0 ]]; then
+                total_behind=$((total_behind + 1))
+                
+                # Switch to branch if needed
+                if [[ "$branch" != "$original_branch" ]]; then
+                    if ! run_git_command checkout "$branch" --quiet; then
+                        fail_count=$((fail_count + 1))
+                        continue
+                    fi
+                fi
+                
+                # Check if clean (should be, but double-check)
+                if [[ -n "$(run_git_command status --porcelain 2>/dev/null)" ]]; then
+                    # Not clean, skip this branch
+                    if [[ "$branch" != "$original_branch" ]]; then
+                        run_git_command checkout "$original_branch" --quiet
+                    fi
+                    fail_count=$((fail_count + 1))
+                    continue
+                fi
+                
+                # Try pull
+                if run_git_command pull --ff-only &>/dev/null; then
+                    pulled_count=$((pulled_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+                
+                # Return to original branch if we switched
+                if [[ "$branch" != "$original_branch" ]]; then
+                    run_git_command checkout "$original_branch" --quiet
+                fi
+            fi
+        done < <(run_git_command branch --format="%(refname:short)|%(upstream:short)" 2>/dev/null)
+        
+        # Update status based on results
+        if [[ "$fail_count" -eq 0 ]]; then
+            REPO_STATUSES[$index]="pulled"
+            REPO_MESSAGES[$index]="Auto-pulled $pulled_count branch(es)"
+        else
+            REPO_MESSAGES[$index]="Partial: $pulled_count pulled, $fail_count failed"
+        fi
+        
+        return $((fail_count == 0 ? 0 : 1))
+    fi
+    
+    # Original logic for other cases (submodule_updates, etc.)
     # Get branches that track upstream
     while IFS='|' read -r branch upstream; do
         [[ -z "$branch" || -z "$upstream" ]] && continue

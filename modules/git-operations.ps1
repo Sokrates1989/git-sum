@@ -144,6 +144,7 @@ function Get-RepoStatus {
         message = ""
         canPull = $false
         pullResult = $null
+        originalBranch = ""  # Store user's original branch for auto-pull
     }
     
     Push-Location $RepoPath
@@ -161,6 +162,7 @@ function Get-RepoStatus {
         # Get current branch
         $branchInfo = Run-GitCommand -Arguments "rev-parse", "--abbrev-ref", "HEAD" -WorkingDirectory $RepoPath
         $result.currentBranch = ($branchInfo | Select-Object -First 1).Trim()
+        $result.originalBranch = $result.currentBranch  # Store for auto-pull restoration
         
         # Check for uncommitted changes
         $statusLines = Run-GitCommand -Arguments "status", "--porcelain" -WorkingDirectory $RepoPath
@@ -498,6 +500,64 @@ function Invoke-RepoScan {
                             Set-RepoStatusField -Status $status -Name "message" -Value $submoduleResult.message
                         } else {
                             Write-Host " Failed" -ForegroundColor Red
+                        }
+                    } elseif ($status.status -eq "behind") {
+                        # Auto-pull behind repos even if on different branch
+                        $originalBranch = $status.originalBranch
+                        $branchesBehind = $status.branches | Where-Object { $_.behind -gt 0 }
+                        $pulledCount = 0
+                        $failedCount = 0
+                        
+                        foreach ($branchInfo in $branchesBehind) {
+                            $branchName = $branchInfo.name
+                            
+                            # Switch to branch if needed
+                            if ($branchName -ne $originalBranch) {
+                                Run-GitCommand -Arguments "checkout", $branchName, "--quiet" -WorkingDirectory $repoPath
+                                if ($LASTEXITCODE -ne 0) {
+                                    $failedCount++
+                                    continue
+                                }
+                            }
+                            
+                            # Check if clean (should be, but double-check)
+                            $statusCheck = Run-GitCommand -Arguments "status", "--porcelain" -WorkingDirectory $repoPath
+                            if ($statusCheck) {
+                                # Not clean, skip this branch
+                                if ($branchName -ne $originalBranch) {
+                                    Run-GitCommand -Arguments "checkout", $originalBranch, "--quiet" -WorkingDirectory $repoPath
+                                }
+                                $failedCount++
+                                continue
+                            }
+                            
+                            # Pull the branch
+                            Run-GitCommand -Arguments "pull", "--ff-only" -WorkingDirectory $repoPath
+                            if ($LASTEXITCODE -eq 0) {
+                                $pulledCount++
+                            } else {
+                                $failedCount++
+                            }
+                            
+                            # Return to original branch if we switched
+                            if ($branchName -ne $originalBranch) {
+                                Run-GitCommand -Arguments "checkout", $originalBranch, "--quiet" -WorkingDirectory $repoPath
+                            }
+                        }
+                        
+                        # Update status based on results
+                        if ($failedCount -eq 0) {
+                            Write-Host " Auto-pulled $pulledCount branch(es)" -ForegroundColor Green
+                            Set-RepoStatusField -Status $status -Name "status" -Value "pulled"
+                            Set-RepoStatusField -Status $status -Name "message" -Value "Auto-pulled $pulledCount branch(es)"
+                        } else {
+                            Write-Host " Partial: $pulledCount pulled, $failedCount failed" -ForegroundColor Yellow
+                            Set-RepoStatusField -Status $status -Name "message" -Value "Partial: $pulledCount pulled, $failedCount failed"
+                        }
+                        
+                        Set-RepoStatusField -Status $status -Name "pullResult" -Value @{
+                            success = ($failedCount -eq 0)
+                            message = "Auto-pulled $pulledCount, $failedCount failed"
                         }
                     } else {
                         $pullResult = Invoke-SafePull -RepoPath $repoPath
