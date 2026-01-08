@@ -80,6 +80,7 @@ function Show-Summary {
     $needsAttention += $ahead
     $needsAttention += $diverged
     $needsAttention += $dirty
+    $needsAttention += $noRemote
     $needsAttention += $errors
     
     if ($needsAttention.Count -gt 0) {
@@ -125,6 +126,7 @@ function Show-RepoAttention {
         "ahead" { "[^]" }
         "diverged" { "[!]" }
         "dirty" { "[~]" }
+        "no_remote" { "[-]" }
         "error" { "[X]" }
         "not_git" { "[?]" }
         default { "*" }
@@ -135,6 +137,8 @@ function Show-RepoAttention {
     
     if ($Repo.status -eq "dirty") {
         Write-Host "      Status: $($Repo.message) (on branch: $($Repo.currentBranch))" -ForegroundColor Gray
+    } elseif ($Repo.status -eq "no_remote") {
+        Write-Host "      Status: $($Repo.message)" -ForegroundColor Gray
     } elseif ($Repo.status -eq "error") {
         Write-Host "      Error:  $($Repo.message)" -ForegroundColor Red
     } else {

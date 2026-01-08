@@ -54,7 +54,7 @@ show_summary() {
     [[ "$errors" -gt 0 ]] && echo "   [X] Errors:      $errors"
     
     # Show repos that need attention
-    local needs_attention=$((behind + ahead + diverged + dirty + errors))
+    local needs_attention=$((behind + ahead + diverged + dirty + no_remote + errors))
     
     if [[ "$needs_attention" -gt 0 ]]; then
         echo ""
@@ -66,7 +66,7 @@ show_summary() {
         for i in "${!REPO_STATUSES[@]}"; do
             local status="${REPO_STATUSES[$i]}"
             case "$status" in
-                "behind"|"ahead"|"diverged"|"dirty"|"error"|"not_git")
+                "behind"|"ahead"|"diverged"|"dirty"|"no_remote"|"error"|"not_git")
                     show_repo_attention "$i" "$dry_run"
                     ;;
             esac
@@ -97,6 +97,7 @@ show_repo_attention() {
         "ahead") icon="[^]" ;;
         "diverged") icon="[!]" ;;
         "dirty") icon="[~]" ;;
+        "no_remote") icon="[-]" ;;
         "error") icon="[X]" ;;
         "not_git") icon="[?]" ;;
         *) icon="*" ;;
@@ -107,6 +108,8 @@ show_repo_attention() {
     
     if [[ "$status" == "dirty" ]]; then
         echo "      Status: ${REPO_MESSAGES[$index]} (on branch: ${REPO_BRANCHES[$index]})"
+    elif [[ "$status" == "no_remote" ]]; then
+        echo "      Status: ${REPO_MESSAGES[$index]}"
     elif [[ "$status" == "error" ]]; then
         echo "      Error:  ${REPO_MESSAGES[$index]}"
     else
