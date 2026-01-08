@@ -101,6 +101,7 @@ function Get-RepoStatus {
         status = "unknown"
         message = ""
         canPull = $false
+        pullResult = $null
     }
     
     Push-Location $RepoPath
