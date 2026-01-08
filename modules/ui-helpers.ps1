@@ -143,14 +143,23 @@ function Show-RepoAttention {
         Write-Host "      Error:  $($Repo.message)" -ForegroundColor Red
     } else {
         # Show status for all branches that need attention
+        $problemBranch = ""
         foreach ($branch in $Repo.branches) {
             if ($branch.ahead -gt 0 -and $branch.behind -gt 0) {
                 Write-Host "      Branch $($branch.name): Diverged ($($branch.ahead) ahead, $($branch.behind) behind)" -ForegroundColor Red
+                $problemBranch = $branch.name
             } elseif ($branch.ahead -gt 0) {
                 Write-Host "      Branch $($branch.name): $($branch.ahead) commits ahead" -ForegroundColor Blue
+                $problemBranch = $branch.name
             } elseif ($branch.behind -gt 0) {
                 Write-Host "      Branch $($branch.name): $($branch.behind) commits behind" -ForegroundColor Yellow
+                $problemBranch = $branch.name
             }
+        }
+        
+        # Show branch checkout note if needed
+        if ($problemBranch -and $problemBranch -ne $Repo.currentBranch) {
+            Write-Host "      Note: Switch to branch '$problemBranch' first: cd `"$($Repo.path)`" && git checkout $problemBranch" -ForegroundColor DarkGray
         }
     }
     
@@ -188,11 +197,7 @@ function Get-FixSuggestion {
             return "Manual merge needed. Run: cd `"$($Repo.path)`" && git status"
         }
         "dirty" {
-            if ($Repo.hasUncommittedChanges) {
-                return "Commit or stash changes: cd `"$($Repo.path)`" && git stash"
-            } else {
-                return "Review changes: cd `"$($Repo.path)`" && git status"
-            }
+            return "Check repository status: cd `"$($Repo.path)`" && git status"
         }
         "no_remote" {
             return "Add remote: cd `"$($Repo.path)`" && git remote add origin <url>"
