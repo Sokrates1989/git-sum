@@ -7,8 +7,23 @@
 
 # Install autostart
 install_autostart() {
+    # Default to visible mode for backward compatibility
+    install_autostart_visible
+}
+
+# Install autostart with visible terminal window
+install_autostart_visible() {
     if [[ "$OSTYPE" == darwin* ]]; then
-        install_autostart_macos
+        install_autostart_macos_visible
+    else
+        install_autostart_linux
+    fi
+}
+
+# Install autostart in background
+install_autostart_background() {
+    if [[ "$OSTYPE" == darwin* ]]; then
+        install_autostart_macos_background
     else
         install_autostart_linux
     fi
@@ -34,7 +49,41 @@ is_autostart_installed() {
 
 # === macOS Implementation ===
 
-install_autostart_macos() {
+install_autostart_macos_visible() {
+    local plist_path="$HOME/Library/LaunchAgents/com.gitsum.agent.plist"
+    local script_path="${ROOT_DIR}/git-sum.sh"
+    
+    mkdir -p "$HOME/Library/LaunchAgents"
+    
+    cat > "$plist_path" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.gitsum.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/osascript</string>
+        <string>-e</string>
+        <string>tell application "Terminal" to do script "/bin/bash ${script_path}"</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>86400</integer>
+</dict>
+</plist>
+EOF
+    
+    launchctl load "$plist_path" 2>/dev/null || true
+    
+    echo "[OK] Added git-sum to macOS Login Items"
+    echo "   Location: $plist_path"
+    echo "   Note: Will open in Terminal window when you log in"
+}
+
+install_autostart_macos_background() {
     local plist_path="$HOME/Library/LaunchAgents/com.gitsum.agent.plist"
     local script_path="${ROOT_DIR}/git-sum.sh"
     
@@ -68,6 +117,7 @@ EOF
     
     echo "[OK] Added git-sum to macOS Login Items"
     echo "   Location: $plist_path"
+    echo "   Note: Will run in background (logs: /tmp/git-sum.log)"
 }
 
 uninstall_autostart_macos() {
@@ -153,8 +203,10 @@ run_autostart_config() {
     
     if [[ "$is_installed" == "true" ]]; then
         echo "   1) Disable autostart"
+        echo "   2) Reconfigure (visible/background)"
     else
-        echo "   1) Enable autostart"
+        echo "   1) Enable autostart (visible terminal)"
+        echo "   2) Enable autostart (background)"
     fi
     echo "   q) Back"
     echo ""
@@ -168,7 +220,37 @@ run_autostart_config() {
                 uninstall_autostart
             else
                 set_autostart "true"
-                install_autostart
+                install_autostart_visible
+            fi
+            ;;
+        2)
+            if [[ "$is_installed" == "true" ]]; then
+                echo ""
+                echo "Choose autostart mode:"
+                echo "   1) Visible terminal window"
+                echo "   2) Background (silent)"
+                echo "   q) Cancel"
+                echo ""
+                read -p "Choose mode: " mode_choice
+                case "$(echo "$mode_choice" | tr '[:upper:]' '[:lower:]')" in
+                    1)
+                        uninstall_autostart
+                        install_autostart_visible
+                        ;;
+                    2)
+                        uninstall_autostart
+                        install_autostart_background
+                        ;;
+                    q)
+                        return
+                        ;;
+                    *)
+                        echo "Invalid choice."
+                        ;;
+                esac
+            else
+                set_autostart "true"
+                install_autostart_background
             fi
             ;;
         q)
