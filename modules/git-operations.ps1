@@ -440,11 +440,14 @@ function Invoke-RepoScan {
         Scans all configured folders for git repos and checks their status
     .PARAMETER DryRun
         If true, don't pull - just show status
+    .PARAMETER TestLimit
+        If specified, limit to first N repositories (for test mode)
     .RETURNS
         Array of repo status results
     #>
     param(
-        [switch]$DryRun
+        [switch]$DryRun,
+        [int]$TestLimit = 0
     )
     
     $config = Get-WatchedFolders
@@ -582,6 +585,18 @@ function Invoke-RepoScan {
             }
             
             $allResults += $status
+            
+            # Check test limit
+            if ($TestLimit -gt 0 -and $allResults.Count -ge $TestLimit) {
+                Write-Host ""
+                Write-Host "[i] Test limit reached: checked $TestLimit repositories" -ForegroundColor Yellow
+                break
+            }
+        }
+        
+        # Check test limit after each folder
+        if ($TestLimit -gt 0 -and $allResults.Count -ge $TestLimit) {
+            break
         }
     }
     

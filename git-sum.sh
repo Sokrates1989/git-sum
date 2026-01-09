@@ -37,6 +37,8 @@ source "${MODULES_DIR}/autostart-manager.sh"
 # === Variables ===
 MODE="run"
 DRY_RUN=false
+TEST_MODE=false
+TEST_LIMIT=0
 
 # === Functions ===
 
@@ -49,6 +51,8 @@ show_help() {
     echo "  git-sum              Normal run - check all repos and pull if safe"
     echo "  git-sum -a           Add more folders to watch (--add)"
     echo "  git-sum -s           Dry run - show status without pulling (--status)"
+    echo "  git-sum -d           Dry run - show status without pulling (--dry-run)"
+    echo "  git-sum -t [N]       Test mode - check first N repos (default: 5) (--test)"
     echo "  git-sum -c           Open configuration editor (--config)"
     echo "  git-sum -as          Configure autostart settings (--autostart)"
     echo "  git-sum -u           Update to latest version (--update)"
@@ -123,6 +127,22 @@ while [[ $# -gt 0 ]]; do
         -s|--status)
             DRY_RUN=true
             shift
+            ;;
+        -d|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -t|--test)
+            TEST_MODE=true
+            DRY_RUN=true  # Test mode is always dry run
+            shift
+            # Check if next argument is a number
+            if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
+                TEST_LIMIT="$1"
+                shift
+            else
+                TEST_LIMIT=5  # Default to 5 repos
+            fi
             ;;
         -c|--config)
             MODE="config"
@@ -211,10 +231,18 @@ case "$MODE" in
             echo "   (Dry run mode - no changes will be made)"
         fi
         
+        if [[ "$TEST_MODE" == true ]]; then
+            echo "   (Test mode: checking first $TEST_LIMIT repositories)"
+        fi
+        
         echo ""
         
         # Get all repos and check their status
-        run_repo_scan "$DRY_RUN"
+        if [[ "$TEST_MODE" == true ]]; then
+            run_repo_scan "$DRY_RUN" "$TEST_LIMIT"
+        else
+            run_repo_scan "$DRY_RUN"
+        fi
         
         # Display summary
         show_summary "$DRY_RUN"

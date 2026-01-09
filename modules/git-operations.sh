@@ -333,6 +333,7 @@ get_status_icon() {
 # Scan all repos
 run_repo_scan() {
     local dry_run=${1:-false}
+    local test_limit=${2:-0}
     
     reset_results
     
@@ -380,7 +381,19 @@ run_repo_scan() {
                     echo " Failed"
                 fi
             fi
+            
+            # Check test limit
+            if [[ "$test_limit" -gt 0 && "${#REPO_NAMES[@]}" -ge "$test_limit" ]]; then
+                echo ""
+                echo "[i] Test limit reached: checked $test_limit repositories"
+                break
+            fi
         done
+        
+        # Check test limit after each folder
+        if [[ "$test_limit" -gt 0 && "${#REPO_NAMES[@]}" -ge "$test_limit" ]]; then
+            break
+        fi
     done < <(get_all_folders)
 }
 

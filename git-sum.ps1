@@ -38,10 +38,12 @@
 param(
     [Alias("a")][switch]$Add,
     [Alias("s")][switch]$Status,
+    [Alias("d")][switch]$DryRun,
     [Alias("c")][switch]$Config,
     [Alias("as")][switch]$Autostart,
     [Alias("u")][switch]$Update,
-    [Alias("h")][switch]$Help
+    [Alias("h")][switch]$Help,
+    [Alias("t")][int]$TestLimit
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,6 +82,8 @@ function Show-Help {
     Write-Host "  git-sum              Normal run - check all repos and pull if safe"
     Write-Host "  git-sum -a           Add more folders to watch (--add)"
     Write-Host "  git-sum -s           Dry run - show status without pulling (--status)"
+    Write-Host "  git-sum -d           Dry run - show status without pulling (--dry-run)"
+    Write-Host "  git-sum -t [N]       Test mode - check first N repos (default: 5) (--test)"
     Write-Host "  git-sum -c           Open configuration editor (--config)"
     Write-Host "  git-sum -as          Configure autostart settings (--autostart)"
     Write-Host "  git-sum -u           Update to latest version (--update)"
@@ -233,7 +237,14 @@ if (-not (Test-FirstTimeSetup)) {
 }
 
 # Normal run or status mode
-$dryRun = $Status.IsPresent
+$dryRun = $Status.IsPresent -or $DryRun.IsPresent
+
+# Handle test mode
+$testMode = $false
+if ($TestLimit -ne 0) {
+    $testMode = $true
+    $dryRun = $true  # Test mode is always dry run
+}
 
 Write-Host ""
 Write-Host "[*] git-sum - Scanning repositories..." -ForegroundColor Cyan
@@ -243,10 +254,19 @@ if ($dryRun) {
     Write-Host "   (Dry run mode - no changes will be made)" -ForegroundColor Yellow
 }
 
+if ($testMode) {
+    $limit = if ($TestLimit -gt 0) { $TestLimit } else { 5 }
+    Write-Host "   (Test mode: checking first $limit repositories)" -ForegroundColor Yellow
+}
+
 Write-Host ""
 
 # Get all repos and check their status
-$results = Invoke-RepoScan -DryRun:$dryRun
+$scanParams = @{ DryRun = $dryRun }
+if ($testMode) {
+    $scanParams.TestLimit = if ($TestLimit -gt 0) { $TestLimit } else { 5 }
+}
+$results = Invoke-RepoScan @scanParams
 
 # Display summary
 Show-Summary -Results $results -DryRun:$dryRun
