@@ -189,12 +189,19 @@ function Show-RepoAttention {
             Write-Host "      [>] Run individual branches:" -ForegroundColor Cyan
             foreach ($branch in $Repo.branches) {
                 if ($branch.ahead -gt 0 -and $branch.behind -gt 0) {
-                    Write-Host "         cd `"$($Repo.path)`" && git checkout $($branch.name) && git status" -ForegroundColor DarkGray
+                    Write-Host "         cd `"$($Repo.path)`"" -ForegroundColor DarkGray
+                    Write-Host "         git checkout $($branch.name)" -ForegroundColor DarkGray
+                    Write-Host "         git status" -ForegroundColor DarkGray
                 } elseif ($branch.ahead -gt 0) {
-                    Write-Host "         cd `"$($Repo.path)`" && git checkout $($branch.name) && git push" -ForegroundColor DarkGray
+                    Write-Host "         cd `"$($Repo.path)`"" -ForegroundColor DarkGray
+                    Write-Host "         git checkout $($branch.name)" -ForegroundColor DarkGray
+                    Write-Host "         git push" -ForegroundColor DarkGray
                 } elseif ($branch.behind -gt 0) {
-                    Write-Host "         cd `"$($Repo.path)`" && git checkout $($branch.name) && git pull" -ForegroundColor DarkGray
+                    Write-Host "         cd `"$($Repo.path)`"" -ForegroundColor DarkGray
+                    Write-Host "         git checkout $($branch.name)" -ForegroundColor DarkGray
+                    Write-Host "         git pull" -ForegroundColor DarkGray
                 }
+                Write-Host ""
             }
         }
     }
@@ -204,6 +211,13 @@ function Show-RepoAttention {
         $suggestion = Get-FixSuggestion -Repo $Repo
         if ($suggestion) {
             Write-Host "      [>] $suggestion" -ForegroundColor Cyan
+            # Split the suggestion into multiple lines for easier copying
+            if ($suggestion -match "cd\s+`"([^`]+)`"") {
+                $path = $matches[1]
+                $command = $suggestion -replace "cd\s+`"$path`";\s*", ""
+                Write-Host "         cd `"$path`"" -ForegroundColor DarkGray
+                Write-Host "         $command" -ForegroundColor DarkGray
+            }
         }
     }
     

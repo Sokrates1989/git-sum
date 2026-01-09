@@ -174,11 +174,17 @@ show_repo_attention() {
                 behind=$(run_git_command rev-list --count "$branch..$upstream" 2>/dev/null || echo 0)
                 
                 if [[ "$ahead" -gt 0 ]] && [[ "$behind" -gt 0 ]]; then
-                    echo "         cd \"${REPO_PATHS[$index]}\" && git checkout $branch && git status"
+                    echo "         cd \"${REPO_PATHS[$index]}\""
+                    echo "         git checkout $branch"
+                    echo "         git status"
                 elif [[ "$ahead" -gt 0 ]]; then
-                    echo "         cd \"${REPO_PATHS[$index]}\" && git checkout $branch && git push"
+                    echo "         cd \"${REPO_PATHS[$index]}\""
+                    echo "         git checkout $branch"
+                    echo "         git push"
                 elif [[ "$behind" -gt 0 ]]; then
-                    echo "         cd \"${REPO_PATHS[$index]}\" && git checkout $branch && git pull"
+                    echo "         cd \"${REPO_PATHS[$index]}\""
+                    echo "         git checkout $branch"
+                    echo "         git pull"
                 fi
             done < <(run_git_command branch --format="%(refname:short)|%(upstream:short)" 2>/dev/null)
         fi
@@ -190,6 +196,13 @@ show_repo_attention() {
         suggestion=$(get_fix_suggestion "$index" "$status")
         if [[ -n "$suggestion" ]]; then
             echo "      [>] $suggestion"
+            # Split the suggestion into multiple lines for easier copying
+            if [[ "$suggestion" =~ cd\ \"([^\"]+)\" ]]; then
+                local path="${BASH_REMATCH[1]}"
+                local command=$(echo "$suggestion" | sed 's/.*cd "[^"]*" && //')
+                echo "         cd \"$path\""
+                echo "         $command"
+            fi
         fi
     fi
     
