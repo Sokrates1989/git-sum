@@ -261,6 +261,8 @@ case "$MODE" in
         echo "  git-sum              Normal run - check all repos and pull if safe"
         echo "  git-sum -a           Add more folders to watch (--add)"
         echo "  git-sum -s           Dry run - show status without pulling (--status)"
+        echo "  git-sum -d           Dry run - show status without pulling (--dry-run)"
+        echo "  git-sum -t [N]       Test mode - check first N repos (default: 5) (--test)"
         echo "  git-sum -c           Open configuration editor (--config)"
         echo "  git-sum -as          Configure autostart settings (--autostart)"
         echo "  git-sum -u           Update to latest version (--update)"

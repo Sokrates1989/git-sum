@@ -289,6 +289,8 @@ Write-Host "Usage:" -ForegroundColor Yellow
 Write-Host "  git-sum              Normal run - check all repos and pull if safe"
 Write-Host "  git-sum -a           Add more folders to watch (--add)"
 Write-Host "  git-sum -s           Dry run - show status without pulling (--status)"
+Write-Host "  git-sum -d           Dry run - show status without pulling (--dry-run)"
+Write-Host "  git-sum -t [N]       Test mode - check first N repos (default: 5) (--test)"
 Write-Host "  git-sum -c           Open configuration editor (--config)"
 Write-Host "  git-sum -as          Configure autostart settings (--autostart)"
 Write-Host "  git-sum -u           Update to latest version (--update)"
