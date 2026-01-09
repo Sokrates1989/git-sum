@@ -245,7 +245,7 @@ $TestLimit = 0
 
 if ($TestArg -ne "") {
     $testMode = $true
-    $dryRun = $true  # Test mode is always dry run
+    # Test mode runs normally unless -d is also specified
     if ($TestArg -match '^\d+$') {
         $TestLimit = [int]$TestArg
     } else {
@@ -263,7 +263,8 @@ if ($dryRun) {
 
 if ($testMode) {
     $limit = if ($TestLimit -gt 0) { $TestLimit } else { 5 }
-    Write-Host "   (Test mode: checking first $limit repositories)" -ForegroundColor Yellow
+    $modeText = if ($dryRun) { "Test mode (dry run): checking first $limit repositories" } else { "Test mode: checking first $limit repositories" }
+    Write-Host "   ($modeText)" -ForegroundColor Yellow
 }
 
 Write-Host ""

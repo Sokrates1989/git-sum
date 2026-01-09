@@ -134,7 +134,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -t|--test)
             TEST_MODE=true
-            DRY_RUN=true  # Test mode is always dry run
+            # Test mode runs normally unless -d is also specified
             shift
             # Check if next argument is a number
             if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
@@ -232,7 +232,11 @@ case "$MODE" in
         fi
         
         if [[ "$TEST_MODE" == true ]]; then
-            echo "   (Test mode: checking first $TEST_LIMIT repositories)"
+            if [[ "$DRY_RUN" == true ]]; then
+                echo "   (Test mode (dry run): checking first $TEST_LIMIT repositories)"
+            else
+                echo "   (Test mode: checking first $TEST_LIMIT repositories)"
+            fi
         fi
         
         echo ""
