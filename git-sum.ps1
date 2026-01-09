@@ -43,7 +43,8 @@ param(
     [Alias("as")][switch]$Autostart,
     [Alias("u")][switch]$Update,
     [Alias("h")][switch]$Help,
-    [Alias("t")][int]$TestLimit = 0
+    [Alias("t")][int]$TestLimit = 0,
+    [ValueFromRemainingArguments]$RemainingArgs
 )
 
 $ErrorActionPreference = "Stop"
@@ -244,6 +245,16 @@ $testMode = $false
 if ($TestLimit -ne 0) {
     $testMode = $true
     $dryRun = $true  # Test mode is always dry run
+} elseif ($RemainingArgs -and $RemainingArgs.Count -gt 0) {
+    # Check if remaining args contain a number for test limit
+    foreach ($arg in $RemainingArgs) {
+        if ($arg -match '^\d+$') {
+            $TestLimit = [int]$arg
+            $testMode = $true
+            $dryRun = $true
+            break
+        }
+    }
 }
 
 Write-Host ""
