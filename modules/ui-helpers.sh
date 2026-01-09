@@ -195,13 +195,12 @@ show_repo_attention() {
         local suggestion
         suggestion=$(get_fix_suggestion "$index" "$status")
         if [[ -n "$suggestion" ]]; then
-            echo "      [>] $suggestion"
+            echo "      [>] Check repository status:"
             # Split the suggestion into multiple lines for easier copying
             if [[ "$suggestion" =~ cd\ \"([^\"]+)\" ]]; then
                 local path="${BASH_REMATCH[1]}"
                 local command=$(echo "$suggestion" | sed 's/.*cd "[^"]*" && //')
-                echo "         cd \"$path\""
-                echo "         $command"
+                echo "         cd \"$path\"; $command"
             fi
         fi
     fi
