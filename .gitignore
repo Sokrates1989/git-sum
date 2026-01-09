@@ -22,3 +22,6 @@ Desktop.ini
 # Temporary files
 *.tmp
 *.temp
+
+# Test scripts (keep them in testing/ directory)
+test_*.ps1

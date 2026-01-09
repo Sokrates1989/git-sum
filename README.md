@@ -247,6 +247,15 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
+## 🧪 Testing
+
+Test scripts are located in the `testing/` directory to keep the repository root clean:
+
+- **Windows PowerShell tests**: `testing/windows/`
+- **Platform-specific tests**: Organized by OS
+
+> **Note**: Test scripts are ignored from the root directory by `.gitignore`. All testing should be done within the `testing/` directory structure.
+
 ## 📄 License
 
 MIT License - see LICENSE file for details.
