@@ -214,9 +214,12 @@ function Show-RepoAttention {
             # Split the suggestion into multiple lines for easier copying
             if ($suggestion -match 'cd\s+"([^"]+)"') {
                 $path = $matches[1]
-                $command = $suggestion -replace "cd\s+`"$path`";\s*", ""
-                Write-Host "         cd `"$path`"" -ForegroundColor DarkGray
-                Write-Host "         $command" -ForegroundColor DarkGray
+                # Simple split: everything after "cd " and before ";"
+                $parts = $suggestion -split ';\s*', 2
+                if ($parts.Length -eq 2) {
+                    Write-Host "         cd `"$path`"" -ForegroundColor DarkGray
+                    Write-Host "         $($parts[1].Trim())" -ForegroundColor DarkGray
+                }
             }
         }
     }
