@@ -43,7 +43,7 @@ param(
     [Alias("as")][switch]$Autostart,
     [Alias("u")][switch]$Update,
     [Alias("h")][switch]$Help,
-    [Alias("t")][string]$TestArg = ""
+    [Alias("t")][switch]$Test
 )
 
 $ErrorActionPreference = "Stop"
@@ -243,11 +243,13 @@ $dryRun = $Status.IsPresent -or $DryRun.IsPresent
 $testMode = $false
 $TestLimit = 0
 
-if ($TestArg -ne "") {
+if ($Test.IsPresent) {
     $testMode = $true
     # Test mode runs normally unless -d is also specified
-    if ($TestArg -match '^\d+$') {
-        $TestLimit = [int]$TestArg
+    # Check if there's a numeric argument after -t
+    $remainingArgs = $args | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1
+    if ($remainingArgs) {
+        $TestLimit = [int]$remainingArgs
     } else {
         $TestLimit = 5  # Default to 5 repos
     }
