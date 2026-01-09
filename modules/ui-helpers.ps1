@@ -212,7 +212,7 @@ function Show-RepoAttention {
         if ($suggestion) {
             Write-Host "      [>] $suggestion" -ForegroundColor Cyan
             # Split the suggestion into multiple lines for easier copying
-            if ($suggestion -match "cd\s+`"([^`]+)`"") {
+            if ($suggestion -match 'cd\s+"([^"]+)"') {
                 $path = $matches[1]
                 $command = $suggestion -replace "cd\s+`"$path`";\s*", ""
                 Write-Host "         cd `"$path`"" -ForegroundColor DarkGray
