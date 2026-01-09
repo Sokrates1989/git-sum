@@ -226,22 +226,22 @@ function Get-FixSuggestion {
     
     switch ($Repo.status) {
         "behind" {
-            return "Run: cd `"$($Repo.path)`" && git pull"
+            return "Run: cd `"$($Repo.path)`"; git pull"
         }
         "ahead" {
-            return "Run: cd `"$($Repo.path)`" && git push"
+            return "Run: cd `"$($Repo.path)`"; git push"
         }
         "diverged" {
-            return "Manual merge needed. Run: cd `"$($Repo.path)`" && git status"
+            return "Manual merge needed. Run: cd `"$($Repo.path)`"; git status"
         }
         "dirty" {
-            return "Check repository status: cd `"$($Repo.path)`" && git status"
+            return "Check repository status: cd `"$($Repo.path)`"; git status"
         }
         "no_remote" {
-            return "Add remote: cd `"$($Repo.path)`" && git remote add origin <url>"
+            return "Add remote: cd `"$($Repo.path)`"; git remote add origin <url>"
         }
         "error" {
-            return "Check repository: cd `"$($Repo.path)`" && git status"
+            return "Check repository: cd `"$($Repo.path)`"; git status"
         }
         default {
             return $null
