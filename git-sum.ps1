@@ -43,7 +43,7 @@ param(
     [Alias("as")][switch]$Autostart,
     [Alias("u")][switch]$Update,
     [Alias("h")][switch]$Help,
-    [Alias("t")][int]$TestLimit
+    [Alias("t")][int]$TestLimit = 0
 )
 
 $ErrorActionPreference = "Stop"
