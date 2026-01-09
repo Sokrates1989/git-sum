@@ -43,8 +43,7 @@ param(
     [Alias("as")][switch]$Autostart,
     [Alias("u")][switch]$Update,
     [Alias("h")][switch]$Help,
-    [Alias("t")][int]$TestLimit = 0,
-    [ValueFromRemainingArguments]$RemainingArgs
+    [Alias("t")][string]$TestArg = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -242,18 +241,15 @@ $dryRun = $Status.IsPresent -or $DryRun.IsPresent
 
 # Handle test mode
 $testMode = $false
-if ($TestLimit -ne 0) {
+$TestLimit = 0
+
+if ($TestArg -ne "") {
     $testMode = $true
     $dryRun = $true  # Test mode is always dry run
-} elseif ($RemainingArgs -and $RemainingArgs.Count -gt 0) {
-    # Check if remaining args contain a number for test limit
-    foreach ($arg in $RemainingArgs) {
-        if ($arg -match '^\d+$') {
-            $TestLimit = [int]$arg
-            $testMode = $true
-            $dryRun = $true
-            break
-        }
+    if ($TestArg -match '^\d+$') {
+        $TestLimit = [int]$TestArg
+    } else {
+        $TestLimit = 5  # Default to 5 repos
     }
 }
 
