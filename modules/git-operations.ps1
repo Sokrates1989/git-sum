@@ -534,9 +534,27 @@ function Invoke-RepoScan {
                                 continue
                             }
                             
+                            # Get behind count before pull to detect if pull actually updated anything
+                            $behindBefore = (Run-GitCommand -Arguments "rev-list", "--count", "$branchName..$($branchInfo.upstream)" -WorkingDirectory $repoPath | Select-Object -First 1).ToString().Trim()
+                            if ($behindBefore -match "^\d+$") {
+                                $behindBefore = [int]$behindBefore
+                            } else {
+                                $behindBefore = 0
+                            }
+                            
                             # Pull the branch
                             Run-GitCommand -Arguments "pull", "--ff-only" -WorkingDirectory $repoPath
-                            if ($LASTEXITCODE -eq 0) {
+                            
+                            # Check if pull actually updated the repository by checking behind count again
+                            $behindAfter = (Run-GitCommand -Arguments "rev-list", "--count", "$branchName..$($branchInfo.upstream)" -WorkingDirectory $repoPath | Select-Object -First 1).ToString().Trim()
+                            if ($behindAfter -match "^\d+$") {
+                                $behindAfter = [int]$behindAfter
+                            } else {
+                                $behindAfter = 0
+                            }
+                            
+                            # Count as successful pull only if exit code was 0 AND repository was actually updated
+                            if ($LASTEXITCODE -eq 0 -and $behindAfter -lt $behindBefore) {
                                 $pulledCount++
                             } else {
                                 $failedCount++
