@@ -114,6 +114,45 @@ function Show-Summary {
         foreach ($repo in $needsAttention) {
             Show-RepoAttention -Repo $repo -DryRun:$DryRun
         }
+        
+        if ($needsAttention.Count -gt 1) {
+            Write-Host ""
+            Write-Host "===============================================================" -ForegroundColor Cyan
+            Write-Host "[*] Summary (Repeated)" -ForegroundColor Cyan
+            Write-Host "===============================================================" -ForegroundColor Cyan
+            Write-Host ""
+            
+            Write-Host "   Total repositories scanned: $($Results.Count)" -ForegroundColor White
+            Write-Host ""
+            
+            if ($pulled.Count -gt 0) {
+                Write-Host "   [OK] Pulled:      $($pulled.Count)" -ForegroundColor Green
+            }
+            if ($upToDate.Count -gt 0) {
+                Write-Host "   [OK] Up to date:  $($upToDate.Count)" -ForegroundColor Green
+            }
+            if ($behind.Count -gt 0) {
+                Write-Host "   [v] Behind:      $($behind.Count)" -ForegroundColor Yellow
+            }
+            if ($ahead.Count -gt 0) {
+                Write-Host "   [^] Ahead:       $($ahead.Count)" -ForegroundColor Blue
+            }
+            if ($diverged.Count -gt 0) {
+                Write-Host "   [!] Diverged:    $($diverged.Count)" -ForegroundColor Red
+            }
+            if ($dirty.Count -gt 0) {
+                Write-Host "   [~] Dirty:       $($dirty.Count)" -ForegroundColor Magenta
+            }
+            if ($noRemote.Count -gt 0) {
+                Write-Host "   [-] No remote:   $($noRemote.Count)" -ForegroundColor Gray
+            }
+            if ($submoduleUpdates.Count -gt 0) {
+                Write-Host "   [S] Submodules:   $($submoduleUpdates.Count)" -ForegroundColor Cyan
+            }
+            if ($errors.Count -gt 0) {
+                Write-Host "   [X] Errors:      $($errors.Count)" -ForegroundColor Red
+            }
+        }
     }
     
     Write-Host ""

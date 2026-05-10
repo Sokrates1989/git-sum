@@ -91,6 +91,27 @@ show_summary() {
                     ;;
             esac
         done
+        
+        if [[ "$needs_attention" -gt 1 ]]; then
+            echo ""
+            echo "==============================================================="
+            echo "[*] Summary (Repeated)"
+            echo "==============================================================="
+            echo ""
+            
+            echo "   Total repositories scanned: $total"
+            echo ""
+            
+            echo "   ✅ Pulled:      $pulled"
+            echo "   ✅ Up to date:  $up_to_date"
+            echo "   ⬇️ Behind:      $behind"
+            echo "   ⬆️ Ahead:       $ahead"
+            echo "   ⚠️ Diverged:    $diverged"
+            echo "   📝 Dirty:       $dirty"
+            echo "   🔗 No remote:   $no_remote"
+            echo "   📦 Submodules:   $submodule_updates"
+            echo "   ❌ Errors:      $errors"
+        fi
     fi
     
     echo ""
