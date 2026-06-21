@@ -238,55 +238,43 @@ function Get-RepoStatus {
             }
         }
         
-        # Check for submodule updates (even if only submodule changes exist)
-        if (-not $anyDiverged) {
-            $submoduleCheck = Test-SubmoduleUpdates -RepoPath $RepoPath
-            if ($submoduleCheck.hasUpdates) {
-                $result.status = "submodule_updates"
-                $result.message = "Submodules have updates available"
-                $result.canPull = $true
-                return $result
-            }
-        }
-        
-        # Determine overall status
+        # Determine overall status.
+        # NOTE: branch analysis (canPush) must be evaluated before submodule classification
+        # so that dirty repos with committed-ahead branches still get a push attempt.
         if (-not $result.hasRemote) {
             $result.status = "no_remote"
             $result.message = "No remote configured"
         } elseif ($result.hasUncommittedChanges -or $result.hasUntrackedFiles) {
+            # Dirty working tree — still evaluate branch tracking so canPush can be set.
             $result.status = "dirty"
             if ($result.hasUncommittedChanges) {
                 $result.message = "Has uncommitted changes"
             } else {
                 $result.message = "Has untracked files"
             }
-            # Dirty working tree does not block pushing already-committed branches.
-            # Evaluate ahead/behind independently so canPush can still be set.
-            $anyBehindDirty = $result.branches | Where-Object { $_.behind -gt 0 }
-            $anyAheadDirty  = $result.branches | Where-Object { $_.ahead -gt 0 }
-            $anyDivergedDirty = $result.branches | Where-Object { $_.ahead -gt 0 -and $_.behind -gt 0 }
+            $anyBehindDirty   = $result.branches | Where-Object { $_.behind -gt 0 }
+            $anyAheadDirty    = $result.branches | Where-Object { $_.ahead  -gt 0 }
+            $anyDivergedDirty = $result.branches | Where-Object { $_.ahead  -gt 0 -and $_.behind -gt 0 }
             if ($anyAheadDirty -and -not $anyDivergedDirty -and -not $anyBehindDirty) {
                 $result.canPush = $true
             }
         } elseif ($hasOnlySubmoduleChanges) {
-            # Repository is only dirty due to submodule changes - treat as submodule updates
+            # Only submodule pointer changes detected — check whether those submodules need updating.
             $submoduleCheck = Test-SubmoduleUpdates -RepoPath $RepoPath
             if ($submoduleCheck.hasUpdates) {
                 $result.status = "submodule_updates"
                 $result.message = "Submodules have updates available"
                 $result.canPull = $true
-                return $result
             } else {
-                # Submodule changes but no updates available
                 $result.status = "dirty"
                 $result.message = "Has submodule changes"
             }
         } else {
-            # Evaluate all branches
-            $anyBehind = $result.branches | Where-Object { $_.behind -gt 0 }
-            $anyAhead = $result.branches | Where-Object { $_.ahead -gt 0 }
-            $anyDiverged = $result.branches | Where-Object { $_.ahead -gt 0 -and $_.behind -gt 0 }
-            
+            # Clean working tree — evaluate branch tracking fully.
+            $anyBehind  = $result.branches | Where-Object { $_.behind -gt 0 }
+            $anyAhead   = $result.branches | Where-Object { $_.ahead  -gt 0 }
+            $anyDiverged = $result.branches | Where-Object { $_.ahead  -gt 0 -and $_.behind -gt 0 }
+
             if ($anyDiverged) {
                 $result.status = "diverged"
                 $result.message = "Some branches have diverged"
@@ -297,13 +285,20 @@ function Get-RepoStatus {
             } elseif ($anyAhead) {
                 $result.status = "ahead"
                 $result.message = "$($anyAhead.Count) branch(es) ahead"
-                # Only safe to auto-push when no branch is behind (remote is fully in sync)
                 if (-not $anyBehind) {
                     $result.canPush = $true
                 }
             } else {
-                $result.status = "up_to_date"
-                $result.message = "All branches up to date"
+                # Truly up to date — check submodules as a final pass.
+                $submoduleCheck = Test-SubmoduleUpdates -RepoPath $RepoPath
+                if ($submoduleCheck.hasUpdates) {
+                    $result.status = "submodule_updates"
+                    $result.message = "Submodules have updates available"
+                    $result.canPull = $true
+                } else {
+                    $result.status = "up_to_date"
+                    $result.message = "All branches up to date"
+                }
             }
         }
         
@@ -807,13 +802,11 @@ function Test-SubmoduleUpdates {
             #   '+' = working tree ahead of parent index -> needs 'git add <path>' + commit
             #   ' ' = in sync with parent index    -> no action needed
             foreach ($line in $submoduleStatus -split "`n") {
-                if ($line -match '^[-+]') {
+                # git submodule status format: <prefix><hash> <path> [<describe>]
+                # prefix: ' ' = in sync, '-' = not initialized, '+' = different commit, 'U' = merge conflict
+                if ($line -match '^([-+U])([0-9a-f]+)\s+(\S+)') {
                     $result.hasUpdates = $true
-                    # Extract submodule path (second whitespace-delimited field)
-                    $parts = ($line.TrimStart('-+',' ')).Trim() -split '\s+', 2
-                    if ($parts.Length -ge 2) {
-                        $result.submodulesToUpdate += $parts[1].Trim()
-                    }
+                    $result.submodulesToUpdate += $matches[3]
                 }
             }
         }
@@ -860,17 +853,15 @@ function Update-Submodules {
         $submodulesToStage  = @()  # '+' prefix: need add+commit only
 
         foreach ($line in $submoduleStatus -split "`n") {
-            $trimmed = $line.Trim()
-            if (-not $trimmed) { continue }
-            $prefix = $trimmed[0]
-            $fields = $trimmed.TrimStart('-+',' ').Trim() -split '\s+', 2
-            if ($fields.Length -lt 2) { continue }
-            $subPath = $fields[1].Trim()
-
-            if ($prefix -eq '-') {
-                $submodulesToFetch += $subPath
-            } elseif ($prefix -eq '+') {
-                $submodulesToStage += $subPath
+            # git submodule status format: <prefix><hash> <path> [<describe>]
+            if ($line -match '^([-+])([0-9a-f]+)\s+(\S+)') {
+                $prefix  = $matches[1]
+                $subPath = $matches[3]
+                if ($prefix -eq '-') {
+                    $submodulesToFetch += $subPath
+                } elseif ($prefix -eq '+') {
+                    $submodulesToStage += $subPath
+                }
             }
         }
 

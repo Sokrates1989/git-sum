@@ -89,15 +89,20 @@ get_repo_status() {
     local status has_changes=false has_untracked=false has_only_submodule_changes=false
     status=$(run_git_command status --porcelain 2>/dev/null)
     if [[ -n "$status" ]]; then
-        # Check if all changes are submodule changes
-        if echo "$status" | grep -v "^M " | grep -v "^??" | grep -q .; then
-            has_changes=true
-        else
-            # Only submodule changes detected
-            has_only_submodule_changes=true
-        fi
+        # Detect untracked files
         if echo "$status" | grep -q "^??"; then
             has_untracked=true
+            has_changes=true
+        fi
+        # Detect non-submodule, non-untracked changes (staged/unstaged modifications)
+        if echo "$status" | grep -v "^M " | grep -v "^??" | grep -q .; then
+            has_changes=true
+        fi
+        # Only submodule changes if no other dirty state was detected
+        if [[ "$has_changes" == false ]]; then
+            if echo "$status" | grep -q "^M "; then
+                has_only_submodule_changes=true
+            fi
         fi
     fi
     
@@ -131,41 +136,27 @@ get_repo_status() {
         done < <(run_git_command branch --format="%(refname:short)|%(upstream:short)" 2>/dev/null)
     fi
     
-    # Determine overall status
+    # Determine overall status.
+    # NOTE: branch analysis (canPush) must come before submodule classification so that
+    # dirty repos with committed-ahead branches still get a push attempt.
     if [[ "$has_remote" == false ]]; then
         REPO_STATUSES[$index]="no_remote"
         REPO_MESSAGES[$index]="No remote configured"
-    fi
-    
-    # Check for submodule updates (even if only submodule changes exist)
-    if [[ "$any_diverged" -eq 0 ]]; then
-        check_submodules "$repo_path" "$index"
-        # If submodules have updates, that becomes the primary status
-        if [[ "${REPO_STATUSES[$index]}" == "submodule_updates" ]]; then
-            REPO_CAN_PULL[$index]="true"  # Allow pulling to update submodules
-            return 0
-        fi
-    fi
-    
-    # Set final status based on branch analysis
-    if [[ "$has_changes" == true ]]; then
+    elif [[ "$has_changes" == true ]]; then
+        # Dirty working tree — still allow push of committed-ahead branches.
         REPO_STATUSES[$index]="dirty"
         REPO_MESSAGES[$index]="Has uncommitted changes"
         REPO_CAN_PULL[$index]="false"
         REPO_WAS_DIRTY[$index]="true"
-        # Dirty working tree does not block pushing already-committed branches.
-        # Set canPush if the current branch is strictly ahead (no diverge, no behind).
         if [[ "$any_ahead" -gt 0 && "$any_behind" -eq 0 && "$any_diverged" -eq 0 ]]; then
             REPO_CAN_PUSH[$index]="true"
         fi
     elif [[ "$has_only_submodule_changes" == true ]]; then
-        # Repository is only dirty due to submodule changes - treat as submodule updates
+        # Only submodule pointer changes — check whether those submodules need updating.
         check_submodules "$repo_path" "$index"
         if [[ "${REPO_STATUSES[$index]}" == "submodule_updates" ]]; then
-            REPO_CAN_PULL[$index]="true"  # Allow pulling to update submodules
-            return 0
+            REPO_CAN_PULL[$index]="true"
         else
-            # Submodule changes but no updates available
             REPO_STATUSES[$index]="dirty"
             REPO_MESSAGES[$index]="Has submodule changes"
             REPO_CAN_PULL[$index]="false"
@@ -182,14 +173,19 @@ get_repo_status() {
         REPO_STATUSES[$index]="ahead"
         REPO_MESSAGES[$index]="$any_ahead branch(es) ahead"
         REPO_CAN_PULL[$index]="false"
-        # Only safe to auto-push when no branch is behind (remote is fully in sync)
         if [[ "$any_behind" -eq 0 ]]; then
             REPO_CAN_PUSH[$index]="true"
         fi
     else
-        REPO_STATUSES[$index]="up_to_date"
-        REPO_MESSAGES[$index]="All branches up to date"
-        REPO_CAN_PULL[$index]="false"
+        # Clean and up to date — run submodule check as final pass.
+        check_submodules "$repo_path" "$index"
+        if [[ "${REPO_STATUSES[$index]}" == "submodule_updates" ]]; then
+            REPO_CAN_PULL[$index]="true"
+        else
+            REPO_STATUSES[$index]="up_to_date"
+            REPO_MESSAGES[$index]="All branches up to date"
+            REPO_CAN_PULL[$index]="false"
+        fi
     fi
     
     return 0
