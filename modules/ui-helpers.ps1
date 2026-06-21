@@ -31,6 +31,7 @@ function Show-Summary {
     # Group by status
     $upToDate = @($Results | Where-Object { $_.status -eq "up_to_date" })
     $pulled = @($Results | Where-Object { $_.status -eq "pulled" })
+    $autoPushed = @($Results | Where-Object { $_.status -eq "auto_pushed" })
     $behind = @($Results | Where-Object { $_.status -eq "behind" })
     $ahead = @($Results | Where-Object { $_.status -eq "ahead" })
     $diverged = @($Results | Where-Object { $_.status -eq "diverged" })
@@ -52,6 +53,9 @@ function Show-Summary {
     # Status breakdown
     if ($pulled.Count -gt 0) {
         Write-Host "   [OK] Pulled:      $($pulled.Count)" -ForegroundColor Green
+    }
+    if ($autoPushed.Count -gt 0) {
+        Write-Host "   [^] Pushed:       $($autoPushed.Count)" -ForegroundColor Green
     }
     if ($upToDate.Count -gt 0) {
         Write-Host "   [OK] Up to date:  $($upToDate.Count)" -ForegroundColor Green
@@ -78,8 +82,8 @@ function Show-Summary {
         Write-Host "   [X] Errors:      $($errors.Count)" -ForegroundColor Red
     }
     
-    # Show successfully updated repos (so user sees what changed)
-    if ($pulled.Count -gt 0) {
+    # Show successfully updated/pushed repos (so user sees what changed)
+    if ($pulled.Count -gt 0 -or $autoPushed.Count -gt 0) {
         Write-Host ""
         Write-Host "---------------------------------------------------------------" -ForegroundColor Green
         Write-Host "[OK] Successfully Updated Repositories" -ForegroundColor Green
@@ -92,12 +96,19 @@ function Show-Summary {
             Write-Host "      Updated: $($repo.message)" -ForegroundColor Gray
             Write-Host ""
         }
+
+        foreach ($repo in $autoPushed) {
+            Write-Host "   [^] $($repo.name)" -ForegroundColor Green
+            Write-Host "      Path:    $($repo.path)" -ForegroundColor DarkGray
+            Write-Host "      Pushed:  $($repo.message)" -ForegroundColor Gray
+            Write-Host ""
+        }
     }
     
     # Show repos that need attention
     $needsAttention = @()
     $needsAttention += $behind
-    $needsAttention += $ahead
+    $needsAttention += $ahead  # Repos still ahead after failed push
     $needsAttention += $diverged
     $needsAttention += $dirty
     $needsAttention += $noRemote
@@ -127,6 +138,9 @@ function Show-Summary {
             
             if ($pulled.Count -gt 0) {
                 Write-Host "   [OK] Pulled:      $($pulled.Count)" -ForegroundColor Green
+            }
+            if ($autoPushed.Count -gt 0) {
+                Write-Host "   [^] Pushed:       $($autoPushed.Count)" -ForegroundColor Green
             }
             if ($upToDate.Count -gt 0) {
                 Write-Host "   [OK] Up to date:  $($upToDate.Count)" -ForegroundColor Green

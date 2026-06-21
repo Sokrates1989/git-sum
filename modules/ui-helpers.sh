@@ -18,12 +18,13 @@ show_summary() {
     fi
     
     # Count by status
-    local up_to_date=0 pulled=0 behind=0 ahead=0 diverged=0 dirty=0 no_remote=0 submodule_updates=0 errors=0
+    local up_to_date=0 pulled=0 auto_pushed=0 behind=0 ahead=0 diverged=0 dirty=0 no_remote=0 submodule_updates=0 errors=0
     
     for i in "${!REPO_STATUSES[@]}"; do
         case "${REPO_STATUSES[$i]}" in
             "up_to_date") ((up_to_date++)) ;;
             "pulled") ((pulled++)) ;;
+            "auto_pushed") ((auto_pushed++)) ;;
             "behind") ((behind++)) ;;
             "ahead") ((ahead++)) ;;
             "diverged") ((diverged++)) ;;
@@ -46,6 +47,7 @@ show_summary() {
     
     # Status breakdown
     [[ "$pulled" -gt 0 ]] && echo "   ✅ Pulled:      $pulled"
+    [[ "$auto_pushed" -gt 0 ]] && echo "   ⬆️ Pushed:      $auto_pushed"
     [[ "$up_to_date" -gt 0 ]] && echo "   ✅ Up to date:  $up_to_date"
     [[ "$behind" -gt 0 ]] && echo "   ⬇️ Behind:      $behind"
     [[ "$ahead" -gt 0 ]] && echo "   ⬆️ Ahead:       $ahead"
@@ -55,8 +57,8 @@ show_summary() {
     [[ "$submodule_updates" -gt 0 ]] && echo "   📦 Submodules:   $submodule_updates"
     [[ "$errors" -gt 0 ]] && echo "   ❌ Errors:      $errors"
     
-    # Show successfully updated repos (so user sees what changed)
-    if [[ "$pulled" -gt 0 ]]; then
+    # Show successfully updated/pushed repos (so user sees what changed)
+    if [[ "$pulled" -gt 0 || "$auto_pushed" -gt 0 ]]; then
         echo ""
         echo "---------------------------------------------------------------"
         echo "[OK] Successfully Updated Repositories"
@@ -71,10 +73,19 @@ show_summary() {
                 echo ""
             fi
         done
+
+        for i in "${!REPO_STATUSES[@]}"; do
+            if [[ "${REPO_STATUSES[$i]}" == "auto_pushed" ]]; then
+                echo "   [^] ${REPO_NAMES[$i]}"
+                echo "      Path:    ${REPO_PATHS[$i]}"
+                echo "      Pushed:  ${REPO_MESSAGES[$i]}"
+                echo ""
+            fi
+        done
     fi
     
     # Show repos that need attention
-    local needs_attention=$((behind + ahead + diverged + dirty + no_remote + submodule_updates + errors))
+    local needs_attention=$((behind + ahead + diverged + dirty + no_remote + submodule_updates + errors))  # ahead = failed-push repos
     
     if [[ "$needs_attention" -gt 0 ]]; then
         echo ""
@@ -86,7 +97,7 @@ show_summary() {
         for i in "${!REPO_STATUSES[@]}"; do
             local status="${REPO_STATUSES[$i]}"
             case "$status" in
-                "behind"|"ahead"|"diverged"|"dirty"|"no_remote"|"submodule_updates"|"error"|"not_git")
+                "behind"|"ahead"|"diverged"|"dirty"|"no_remote"|"submodule_updates"|"error"|"not_git")  # ahead = failed push
                     show_repo_attention "$i" "$dry_run"
                     ;;
             esac
@@ -103,6 +114,7 @@ show_summary() {
             echo ""
             
             echo "   ✅ Pulled:      $pulled"
+            [[ "$auto_pushed" -gt 0 ]] && echo "   ⬆️ Pushed:      $auto_pushed"
             echo "   ✅ Up to date:  $up_to_date"
             echo "   ⬇️ Behind:      $behind"
             echo "   ⬆️ Ahead:       $ahead"

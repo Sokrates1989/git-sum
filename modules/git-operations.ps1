@@ -143,8 +143,10 @@ function Get-RepoStatus {
         status = "unknown"
         message = ""
         canPull = $false
+        canPush = $false
         pullResult = $null
-        originalBranch = ""  # Store user's original branch for auto-pull
+        pushResult = $null
+        originalBranch = ""  # Store user's original branch for auto-pull/auto-push
     }
     
     Push-Location $RepoPath
@@ -289,6 +291,10 @@ function Get-RepoStatus {
             } elseif ($anyAhead) {
                 $result.status = "ahead"
                 $result.message = "$($anyAhead.Count) branch(es) ahead"
+                # Only safe to auto-push when no branch is behind (remote is fully in sync)
+                if (-not $anyBehind) {
+                    $result.canPush = $true
+                }
             } else {
                 $result.status = "up_to_date"
                 $result.message = "All branches up to date"
@@ -303,6 +309,121 @@ function Get-RepoStatus {
     }
     
     return $result
+}
+
+function Invoke-SafePush {
+    <#
+    .SYNOPSIS
+        Performs a safe git push on all branches that are ahead of their upstream.
+
+    .DESCRIPTION
+        Only pushes branches where the local branch is strictly ahead (no behind commits),
+        meaning no merge is required on the remote side. Uses a non-force push so the
+        remote must accept a fast-forward update. Branches that are also behind (diverged)
+        are skipped — those require manual interaction.
+
+    .PARAMETER RepoPath
+        Path to the git repository.
+
+    .RETURNS
+        Hashtable with success (bool), message (string), and pushedCount/failedCount (int).
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$RepoPath
+    )
+
+    $pushedCount = 0
+    $failedCount = 0
+    $skippedCount = 0
+    $pushMessages = @()
+
+    Push-Location $RepoPath
+    try {
+        $originalBranch = (Run-GitCommand -Arguments "rev-parse", "--abbrev-ref", "HEAD" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
+        $branchList = Run-GitCommand -Arguments "branch", "--format=%(refname:short)|%(upstream:short)" -WorkingDirectory $RepoPath
+
+        foreach ($line in $branchList) {
+            if ($line -match "^(.+)\|(.+)$") {
+                $branch = $matches[1]
+                $upstream = $matches[2]
+
+                if (-not $upstream) {
+                    $skippedCount++
+                    continue
+                }
+
+                # Only push branches that are strictly ahead (behind == 0)
+                $aheadStr = (Run-GitCommand -Arguments "rev-list", "--count", "$upstream..$branch" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
+                $behindStr = (Run-GitCommand -Arguments "rev-list", "--count", "$branch..$upstream" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
+
+                $ahead = 0
+                $behind = 0
+                if ($aheadStr -match "^\d+$") { $ahead = [int]$aheadStr }
+                if ($behindStr -match "^\d+$") { $behind = [int]$behindStr }
+
+                if ($ahead -eq 0) {
+                    continue
+                }
+
+                if ($behind -gt 0) {
+                    # Diverged — skip, requires manual merge
+                    $skippedCount++
+                    continue
+                }
+
+                # Switch to branch if needed
+                if ($branch -ne $originalBranch) {
+                    Run-GitCommand -Arguments "checkout", $branch, "--quiet" -WorkingDirectory $RepoPath
+                    if ($LASTEXITCODE -ne 0) {
+                        $failedCount++
+                        continue
+                    }
+                }
+
+                # Push (non-force, standard fast-forward)
+                $pushOutput = Run-GitCommand -Arguments "push" -WorkingDirectory $RepoPath -TimeoutSeconds 30
+                if ($LASTEXITCODE -eq 0) {
+                    $pushedCount++
+                    $pushMessages += "$branch ($ahead commit(s))"
+                } else {
+                    $failedCount++
+                }
+
+                # Return to original branch if we switched
+                if ($branch -ne $originalBranch) {
+                    Run-GitCommand -Arguments "checkout", $originalBranch, "--quiet" -WorkingDirectory $RepoPath
+                }
+            }
+        }
+
+        # Restore original branch
+        $currentBranch = (Run-GitCommand -Arguments "rev-parse", "--abbrev-ref", "HEAD" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
+        if ($currentBranch -ne $originalBranch) {
+            Run-GitCommand -Arguments "checkout", $originalBranch, "--quiet" -WorkingDirectory $RepoPath
+        }
+
+        $msg = if ($pushMessages.Count -gt 0) { "Pushed: " + ($pushMessages -join ", ") } else { "Nothing pushed" }
+
+        return @{
+            success = ($failedCount -eq 0 -and $pushedCount -gt 0)
+            message = $msg
+            pushedCount = $pushedCount
+            failedCount = $failedCount
+            skippedCount = $skippedCount
+        }
+    } catch {
+        $errorMessage = $_.Exception.Message
+        return @{
+            success = $false
+            message = "Push failed: $errorMessage"
+            pushedCount = 0
+            failedCount = 1
+            skippedCount = 0
+        }
+    } finally {
+        Pop-Location
+    }
 }
 
 function Invoke-SafePull {
@@ -602,6 +723,33 @@ function Invoke-RepoScan {
                 }
             }
             
+            # Auto-push branches that are strictly ahead (no diverge, remote in sync)
+            if (-not $DryRun -and $status.canPush) {
+                Write-Host "      [^] Pushing..." -ForegroundColor Blue -NoNewline
+                try {
+                    $pushResult = Invoke-SafePush -RepoPath $repoPath
+                    Set-RepoStatusField -Status $status -Name "pushResult" -Value $pushResult
+
+                    if ($pushResult.success) {
+                        Write-Host " Auto-pushed $($pushResult.pushedCount) branch(es)" -ForegroundColor Green
+                        Set-RepoStatusField -Status $status -Name "status" -Value "auto_pushed"
+                        Set-RepoStatusField -Status $status -Name "message" -Value $pushResult.message
+                    } elseif ($pushResult.failedCount -gt 0) {
+                        Write-Host " Failed ($($pushResult.failedCount) branch(es) could not be pushed)" -ForegroundColor Red
+                        Set-RepoStatusField -Status $status -Name "message" -Value "Push failed - manual push required"
+                    } else {
+                        Write-Host " Nothing to push" -ForegroundColor Gray
+                    }
+                } catch {
+                    $errorMessage = $_.Exception.Message
+                    Write-Host " Failed" -ForegroundColor Red
+                    Set-RepoStatusField -Status $status -Name "pushResult" -Value @{
+                        success = $false
+                        message = "Push failed: $errorMessage"
+                    }
+                }
+            }
+
             $allResults += $status
             
             # Check test limit

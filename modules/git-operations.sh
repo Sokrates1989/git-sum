@@ -13,8 +13,9 @@ declare -a REPO_STATUSES
 declare -a REPO_MESSAGES
 declare -a REPO_BRANCHES
 declare -a REPO_CAN_PULL
+declare -a REPO_CAN_PUSH
 declare -a REPO_HAS_SUBMODULES
-declare -a REPO_ORIGINAL_BRANCHES  # Store original branch for auto-pull
+declare -a REPO_ORIGINAL_BRANCHES  # Store original branch for auto-pull/auto-push
 
 # Reset results arrays
 reset_results() {
@@ -25,6 +26,7 @@ reset_results() {
     REPO_MESSAGES=()
     REPO_BRANCHES=()
     REPO_CAN_PULL=()
+    REPO_CAN_PUSH=()
     REPO_HAS_SUBMODULES=()
     REPO_ORIGINAL_BRANCHES=()
 }
@@ -60,6 +62,7 @@ get_repo_status() {
     REPO_MESSAGES[$index]=""
     REPO_BRANCHES[$index]=""
     REPO_CAN_PULL[$index]="false"
+    REPO_CAN_PUSH[$index]="false"
     
     cd "$repo_path" || return 1
     
@@ -170,6 +173,10 @@ get_repo_status() {
         REPO_STATUSES[$index]="ahead"
         REPO_MESSAGES[$index]="$any_ahead branch(es) ahead"
         REPO_CAN_PULL[$index]="false"
+        # Only safe to auto-push when no branch is behind (remote is fully in sync)
+        if [[ "$any_behind" -eq 0 ]]; then
+            REPO_CAN_PUSH[$index]="true"
+        fi
     else
         REPO_STATUSES[$index]="up_to_date"
         REPO_MESSAGES[$index]="All branches up to date"
@@ -177,6 +184,90 @@ get_repo_status() {
     fi
     
     return 0
+}
+
+# Perform safe push on all branches that are strictly ahead of their upstream.
+#
+# Args:
+#   $1 - repo_path: Path to the git repository.
+#   $2 - index: Array index for this repository in global REPO_* arrays.
+#
+# Sets:
+#   REPO_STATUSES[$index] to "auto_pushed" on full success.
+#   REPO_MESSAGES[$index] with push result details.
+#
+# Returns:
+#   0 on success (all eligible branches pushed), 1 on partial or full failure.
+do_safe_push() {
+    local repo_path=$1
+    local index=$2
+
+    cd "$repo_path" || return 1
+
+    local original_branch="${REPO_ORIGINAL_BRANCHES[$index]}"
+    local pushed_count=0
+    local failed_count=0
+    local push_details=""
+
+    while IFS='|' read -r branch upstream; do
+        [[ -z "$branch" || -z "$upstream" ]] && continue
+
+        local ahead behind
+        ahead=$(run_git_command rev-list --count "$upstream..$branch" 2>/dev/null || echo 0)
+        behind=$(run_git_command rev-list --count "$branch..$upstream" 2>/dev/null || echo 0)
+
+        # Skip branches that are not ahead
+        [[ "$ahead" -eq 0 ]] && continue
+
+        # Skip diverged branches — require manual merge
+        if [[ "$behind" -gt 0 ]]; then
+            failed_count=$((failed_count + 1))
+            continue
+        fi
+
+        # Switch to branch if needed
+        if [[ "$branch" != "$original_branch" ]]; then
+            if ! run_git_command checkout "$branch" --quiet; then
+                failed_count=$((failed_count + 1))
+                continue
+            fi
+        fi
+
+        # Push (non-force, standard fast-forward)
+        if run_git_command push &>/dev/null; then
+            pushed_count=$((pushed_count + 1))
+            push_details="${push_details}${branch} (${ahead} commit(s)), "
+        else
+            failed_count=$((failed_count + 1))
+        fi
+
+        # Return to original branch if we switched
+        if [[ "$branch" != "$original_branch" ]]; then
+            run_git_command checkout "$original_branch" --quiet
+        fi
+    done < <(run_git_command branch --format="%(refname:short)|%(upstream:short)" 2>/dev/null)
+
+    # Restore original branch
+    local current_branch
+    current_branch=$(run_git_command rev-parse --abbrev-ref HEAD 2>/dev/null)
+    if [[ "$current_branch" != "$original_branch" ]]; then
+        run_git_command checkout "$original_branch" --quiet
+    fi
+
+    # Trim trailing comma+space from details
+    push_details="${push_details%, }"
+
+    if [[ "$pushed_count" -gt 0 && "$failed_count" -eq 0 ]]; then
+        REPO_STATUSES[$index]="auto_pushed"
+        REPO_MESSAGES[$index]="Pushed: $push_details"
+        return 0
+    elif [[ "$pushed_count" -gt 0 ]]; then
+        REPO_MESSAGES[$index]="Partial push: $pushed_count pushed, $failed_count failed"
+        return 1
+    else
+        REPO_MESSAGES[$index]="Push failed - manual push required"
+        return 1
+    fi
 }
 
 # Perform safe pull on all branches
@@ -320,6 +411,7 @@ get_status_icon() {
     local status=$1
     case "$status" in
         "up_to_date"|"pulled") echo "✅" ;;
+        "auto_pushed") echo "⬆️✅" ;;
         "behind") echo "⬇️" ;;
         "ahead") echo "⬆️" ;;
         "diverged") echo "⚠️" ;;
@@ -379,6 +471,16 @@ run_repo_scan() {
                     echo " ${REPO_MESSAGES[$current_index]}"
                 else
                     echo " Failed"
+                fi
+            fi
+
+            # Auto-push branches that are strictly ahead (no diverge, remote in sync)
+            if [[ "$dry_run" != "true" ]] && [[ "${REPO_CAN_PUSH[$current_index]}" == "true" ]]; then
+                echo -n "      [^] Pushing..."
+                if do_safe_push "$repo_path" "$current_index"; then
+                    echo " ${REPO_MESSAGES[$current_index]}"
+                else
+                    echo " ${REPO_MESSAGES[$current_index]}"
                 fi
             fi
             
