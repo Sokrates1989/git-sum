@@ -262,6 +262,14 @@ function Get-RepoStatus {
             } else {
                 $result.message = "Has untracked files"
             }
+            # Dirty working tree does not block pushing already-committed branches.
+            # Evaluate ahead/behind independently so canPush can still be set.
+            $anyBehindDirty = $result.branches | Where-Object { $_.behind -gt 0 }
+            $anyAheadDirty  = $result.branches | Where-Object { $_.ahead -gt 0 }
+            $anyDivergedDirty = $result.branches | Where-Object { $_.ahead -gt 0 -and $_.behind -gt 0 }
+            if ($anyAheadDirty -and -not $anyDivergedDirty -and -not $anyBehindDirty) {
+                $result.canPush = $true
+            }
         } elseif ($hasOnlySubmoduleChanges) {
             # Repository is only dirty due to submodule changes - treat as submodule updates
             $submoduleCheck = Test-SubmoduleUpdates -RepoPath $RepoPath

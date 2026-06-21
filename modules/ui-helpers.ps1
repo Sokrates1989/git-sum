@@ -101,6 +101,9 @@ function Show-Summary {
             Write-Host "   [^] $($repo.name)" -ForegroundColor Green
             Write-Host "      Path:    $($repo.path)" -ForegroundColor DarkGray
             Write-Host "      Pushed:  $($repo.message)" -ForegroundColor Gray
+            if ($repo.hasUncommittedChanges -or $repo.hasUntrackedFiles) {
+                Write-Host "      [~] Note: repo still has local uncommitted changes" -ForegroundColor Yellow
+            }
             Write-Host ""
         }
     }

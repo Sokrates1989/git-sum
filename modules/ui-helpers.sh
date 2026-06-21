@@ -79,6 +79,9 @@ show_summary() {
                 echo "   [^] ${REPO_NAMES[$i]}"
                 echo "      Path:    ${REPO_PATHS[$i]}"
                 echo "      Pushed:  ${REPO_MESSAGES[$i]}"
+                if [[ "${REPO_WAS_DIRTY[$i]:-false}" == "true" ]]; then
+                    echo "      [~] Note: repo still has local uncommitted changes"
+                fi
                 echo ""
             fi
         done

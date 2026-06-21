@@ -14,6 +14,7 @@ declare -a REPO_MESSAGES
 declare -a REPO_BRANCHES
 declare -a REPO_CAN_PULL
 declare -a REPO_CAN_PUSH
+declare -a REPO_WAS_DIRTY
 declare -a REPO_HAS_SUBMODULES
 declare -a REPO_ORIGINAL_BRANCHES  # Store original branch for auto-pull/auto-push
 
@@ -27,6 +28,7 @@ reset_results() {
     REPO_BRANCHES=()
     REPO_CAN_PULL=()
     REPO_CAN_PUSH=()
+    REPO_WAS_DIRTY=()
     REPO_HAS_SUBMODULES=()
     REPO_ORIGINAL_BRANCHES=()
 }
@@ -63,6 +65,7 @@ get_repo_status() {
     REPO_BRANCHES[$index]=""
     REPO_CAN_PULL[$index]="false"
     REPO_CAN_PUSH[$index]="false"
+    REPO_WAS_DIRTY[$index]="false"
     
     cd "$repo_path" || return 1
     
@@ -149,6 +152,12 @@ get_repo_status() {
         REPO_STATUSES[$index]="dirty"
         REPO_MESSAGES[$index]="Has uncommitted changes"
         REPO_CAN_PULL[$index]="false"
+        REPO_WAS_DIRTY[$index]="true"
+        # Dirty working tree does not block pushing already-committed branches.
+        # Set canPush if the current branch is strictly ahead (no diverge, no behind).
+        if [[ "$any_ahead" -gt 0 && "$any_behind" -eq 0 && "$any_diverged" -eq 0 ]]; then
+            REPO_CAN_PUSH[$index]="true"
+        fi
     elif [[ "$has_only_submodule_changes" == true ]]; then
         # Repository is only dirty due to submodule changes - treat as submodule updates
         check_submodules "$repo_path" "$index"
