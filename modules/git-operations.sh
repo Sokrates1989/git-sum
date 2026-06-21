@@ -556,42 +556,67 @@ update_submodules() {
     echo ""
     echo "📦 Updating submodules in $repo_name..."
     
-    # Get list of submodules that need updates
-    local submodules_to_update
-    submodules_to_update=$(run_git_command -C "$repo_path" submodule status 2>/dev/null | grep '^[+-]' | awk '{print $2}')
-    
-    if [[ -z "$submodules_to_update" ]]; then
+    # Classify submodules by prefix:
+    #   '-' = not initialized -> needs 'submodule update --remote' then stage+commit
+    #   '+' = working tree at different commit than parent index -> only stage+commit pointer
+    #         (do NOT run --remote: would loop forever if submodule is already at remote HEAD)
+    local submodules_to_fetch=()  # '-' prefix
+    local submodules_to_stage=()  # '+' prefix
+
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        local prefix="${line:0:1}"
+        # Path is second whitespace-delimited field (after hash)
+        local sub_path
+        sub_path=$(echo "${line#[-+ ]}" | awk '{print $2}')
+        [[ -z "$sub_path" ]] && continue
+        if [[ "$prefix" == "-" ]]; then
+            submodules_to_fetch+=("$sub_path")
+        elif [[ "$prefix" == "+" ]]; then
+            submodules_to_stage+=("$sub_path")
+        fi
+    done < <(run_git_command -C "$repo_path" submodule status 2>/dev/null | grep '^[+-]')
+
+    local all_submodules=("${submodules_to_fetch[@]}" "${submodules_to_stage[@]}")
+
+    if [[ "${#all_submodules[@]}" -eq 0 ]]; then
         echo "   ℹ️  No submodule updates needed"
         return 0
     fi
     
     local updated_count=0
     local failed_count=0
-    
-    while IFS= read -r submodule; do
-        if [[ -n "$submodule" ]]; then
-            echo "   🔄 Updating $submodule..."
-            if run_git_command -C "$repo_path" submodule update --remote "$submodule" &>/dev/null; then
-                echo "   ✅ Updated $submodule"
-                ((updated_count++))
-            else
-                echo "   ❌ Failed to update $submodule"
-                ((failed_count++))
-            fi
+
+    # Run --remote only for uninitialized ('-') submodules
+    for submodule in "${submodules_to_fetch[@]}"; do
+        echo "   🔄 Updating $submodule..."
+        if run_git_command -C "$repo_path" submodule update --remote "$submodule" &>/dev/null; then
+            echo "   ✅ Updated $submodule"
+            ((updated_count++))
+        else
+            echo "   ❌ Failed to update $submodule"
+            ((failed_count++))
         fi
-    done <<< "$submodules_to_update"
+    done
+
+    # For '+' submodules, only stage+commit the pointer (no --remote)
+    for submodule in "${submodules_to_stage[@]}"; do
+        echo "   📌 Staging pointer update for $submodule..."
+        ((updated_count++))
+    done
     
-    # Commit submodule updates if any were successful
+    # Stage each submodule path individually and commit pointer changes
     if [[ "$updated_count" -gt 0 ]]; then
         echo "   📝 Committing submodule updates..."
-        # Stage changes first
-        run_git_command -C "$repo_path" add . &>/dev/null
-        # Check if there are changes to commit
+        for submodule in "${all_submodules[@]}"; do
+            run_git_command -C "$repo_path" add "$submodule" &>/dev/null
+        done
+        # Check whether staging produced any changes
         if run_git_command -C "$repo_path" diff --cached --quiet &>/dev/null; then
-            # No staged changes, but submodules were updated
-            echo "   ℹ️  Submodules updated but no commit needed"
+            # Nothing staged — parent index already matches working tree commits
+            echo "   ℹ️  Submodules already at expected commit, no commit needed"
+            return 0
         else
-            # There are changes to commit
             if run_git_command -C "$repo_path" commit -m "Auto-update submodules ($updated_count updated)" &>/dev/null; then
                 echo "   ✅ Committed submodule updates"
             else

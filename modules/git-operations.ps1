@@ -192,49 +192,47 @@ function Get-RepoStatus {
         $result.hasRemote = [bool]$remotes
         
         if ($result.hasRemote) {
-            # Only fetch/compute branch tracking status when the working tree is clean.
-            # If a repo is dirty, we won't pull anyway, and fetching may trigger auth prompts.
-            if (-not ($result.hasUncommittedChanges -or $result.hasUntrackedFiles)) {
-                # Fetch to check for updates (quiet, non-interactive)
-                $fetchLines = Run-GitCommand -Arguments "fetch", "--all", "--quiet" -WorkingDirectory $RepoPath
-                if ($LASTEXITCODE -ne 0) {
-                    $fetchMessage = ($fetchLines | Select-Object -First 1)
-                    if (-not $fetchMessage) {
-                        $fetchMessage = "Git fetch failed"
-                    }
-                    $result.status = "error"
-                    if ($fetchMessage -match "(?i)(user cancelled dialog|authentication failed|could not read username|terminal prompts disabled|credential|authorization)") {
-                        $result.message = "Authentication required. Run: cd `"$RepoPath`" && git fetch"
-                    } else {
-                        $result.message = "Fetch failed: $fetchMessage"
-                    }
-                    return $result
+            # Always fetch and compute branch tracking status so that canPush can be
+            # determined even for dirty repos (uncommitted changes do not block pushing
+            # already-committed local branches).
+            $fetchLines = Run-GitCommand -Arguments "fetch", "--all", "--quiet" -WorkingDirectory $RepoPath
+            if ($LASTEXITCODE -ne 0) {
+                $fetchMessage = ($fetchLines | Select-Object -First 1)
+                if (-not $fetchMessage) {
+                    $fetchMessage = "Git fetch failed"
                 }
-                
-                # Get all local branches and their status relative to upstream
-                $branchList = Run-GitCommand -Arguments "branch", "--format=%(refname:short)|%(upstream:short)" -WorkingDirectory $RepoPath
-                foreach ($line in $branchList) {
-                    if ($line -match "^(.+)\|(.+)$") {
-                        $branchName = $matches[1]
-                        $upstream = $matches[2]
+                $result.status = "error"
+                if ($fetchMessage -match "(?i)(user cancelled dialog|authentication failed|could not read username|terminal prompts disabled|credential|authorization)") {
+                    $result.message = "Authentication required. Run: cd `"$RepoPath`" && git fetch"
+                } else {
+                    $result.message = "Fetch failed: $fetchMessage"
+                }
+                return $result
+            }
+            
+            # Get all local branches and their status relative to upstream
+            $branchList = Run-GitCommand -Arguments "branch", "--format=%(refname:short)|%(upstream:short)" -WorkingDirectory $RepoPath
+            foreach ($line in $branchList) {
+                if ($line -match "^(.+)\|(.+)$") {
+                    $branchName = $matches[1]
+                    $upstream = $matches[2]
+                    
+                    if ($upstream) {
+                        $aheadStr = (Run-GitCommand -Arguments "rev-list", "--count", "$upstream..$branchName" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
+                        $behindStr = (Run-GitCommand -Arguments "rev-list", "--count", "$branchName..$upstream" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
                         
-                        if ($upstream) {
-                            $aheadStr = (Run-GitCommand -Arguments "rev-list", "--count", "$upstream..$branchName" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
-                            $behindStr = (Run-GitCommand -Arguments "rev-list", "--count", "$branchName..$upstream" -WorkingDirectory $RepoPath | Select-Object -First 1).ToString().Trim()
-                            
-                            $ahead = 0
-                            $behind = 0
-                            if ($aheadStr -match "^\d+$") { $ahead = [int]$aheadStr }
-                            if ($behindStr -match "^\d+$") { $behind = [int]$behindStr }
-                            
-                            $branchStatus = @{
-                                name = $branchName
-                                upstream = $upstream
-                                ahead = $ahead
-                                behind = $behind
-                            }
-                            $result.branches += $branchStatus
+                        $ahead = 0
+                        $behind = 0
+                        if ($aheadStr -match "^\d+$") { $ahead = [int]$aheadStr }
+                        if ($behindStr -match "^\d+$") { $behind = [int]$behindStr }
+                        
+                        $branchStatus = @{
+                            name = $branchName
+                            upstream = $upstream
+                            ahead = $ahead
+                            behind = $behind
                         }
+                        $result.branches += $branchStatus
                     }
                 }
             }
@@ -804,14 +802,17 @@ function Test-SubmoduleUpdates {
         if ($LASTEXITCODE -eq 0 -and $submoduleStatus) {
             $result.hasSubmodules = $true
             
-            # Parse submodule status to find updates
+            # Parse submodule status prefixes:
+            #   '-' = not initialized/checked out  -> needs 'submodule update --remote'
+            #   '+' = working tree ahead of parent index -> needs 'git add <path>' + commit
+            #   ' ' = in sync with parent index    -> no action needed
             foreach ($line in $submoduleStatus -split "`n") {
-                if ($line -match '^[+-]') {
+                if ($line -match '^[-+]') {
                     $result.hasUpdates = $true
-                    # Extract submodule name (second field)
-                    $parts = $line -split '\s+'
+                    # Extract submodule path (second whitespace-delimited field)
+                    $parts = ($line.TrimStart('-+',' ')).Trim() -split '\s+', 2
                     if ($parts.Length -ge 2) {
-                        $result.submodulesToUpdate += $parts[1]
+                        $result.submodulesToUpdate += $parts[1].Trim()
                     }
                 }
             }
@@ -850,24 +851,41 @@ function Update-Submodules {
         $submoduleStatus = Run-GitCommand -Arguments "submodule", "status" -WorkingDirectory $RepoPath -TimeoutSeconds 10
         $submodulesToUpdate = @()
         
+        # Classify submodules by prefix:
+        #   '-' = not initialized -> needs 'submodule update --remote' then stage+commit
+        #   '+' = working tree at different commit than parent index -> only stage+commit pointer
+        #         (do NOT run --remote: the submodule has local commits ahead of what the
+        #          parent recorded; --remote would overwrite or produce no change and loop forever)
+        $submodulesToFetch  = @()  # '-' prefix: need --remote
+        $submodulesToStage  = @()  # '+' prefix: need add+commit only
+
         foreach ($line in $submoduleStatus -split "`n") {
-            if ($line -match '^[+-]') {
-                $parts = $line -split '\s+'
-                if ($parts.Length -ge 2) {
-                    $submodulesToUpdate += $parts[1]
-                }
+            $trimmed = $line.Trim()
+            if (-not $trimmed) { continue }
+            $prefix = $trimmed[0]
+            $fields = $trimmed.TrimStart('-+',' ').Trim() -split '\s+', 2
+            if ($fields.Length -lt 2) { continue }
+            $subPath = $fields[1].Trim()
+
+            if ($prefix -eq '-') {
+                $submodulesToFetch += $subPath
+            } elseif ($prefix -eq '+') {
+                $submodulesToStage += $subPath
             }
         }
+
+        $allSubmodules = $submodulesToFetch + $submodulesToStage
         
-        if ($submodulesToUpdate.Count -eq 0) {
+        if ($allSubmodules.Count -eq 0) {
             Write-Host "   [i] No submodule updates needed" -ForegroundColor Gray
             return @{ success = $true; message = "No submodule updates needed" }
         }
         
         $updatedCount = 0
         $failedCount = 0
-        
-        foreach ($submodule in $submodulesToUpdate) {
+
+        # Run --remote only for uninitialized submodules ('-' prefix)
+        foreach ($submodule in $submodulesToFetch) {
             Write-Host "   [>] Updating $submodule..." -ForegroundColor Yellow -NoNewline
             try {
                 $null = Run-GitCommand -Arguments "submodule", "update", "--remote", $submodule -WorkingDirectory $RepoPath -TimeoutSeconds 30
@@ -883,20 +901,29 @@ function Update-Submodules {
                 $failedCount++
             }
         }
+
+        # For '+' prefix submodules just report them (they will be staged below)
+        foreach ($submodule in $submodulesToStage) {
+            Write-Host "   [>] Staging pointer update for $submodule..." -ForegroundColor Yellow -NoNewline
+            Write-Host " OK" -ForegroundColor Green
+            $updatedCount++
+        }
         
-        # Commit submodule updates if any were successful
+        # Stage each submodule path and commit the pointer changes
         if ($updatedCount -gt 0) {
             Write-Host "   [>] Committing submodule updates..." -ForegroundColor Yellow -NoNewline
             try {
-                # Stage changes first
-                $null = Run-GitCommand -Arguments "add", "." -WorkingDirectory $RepoPath -TimeoutSeconds 10
-                # Check if there are changes to commit
-                $stagedChanges = Run-GitCommand -Arguments "diff", "--cached", "--quiet" -WorkingDirectory $RepoPath -TimeoutSeconds 10
+                # Stage each submodule path individually
+                foreach ($submodule in $allSubmodules) {
+                    $null = Run-GitCommand -Arguments "add", $submodule -WorkingDirectory $RepoPath -TimeoutSeconds 10
+                }
+                # Check whether staging actually produced changes
+                $null = Run-GitCommand -Arguments "diff", "--cached", "--quiet" -WorkingDirectory $RepoPath -TimeoutSeconds 10
                 if ($LASTEXITCODE -eq 0) {
-                    # No staged changes, but submodules were updated
-                    Write-Host " [i] Submodules updated but no commit needed" -ForegroundColor Cyan
+                    # Nothing staged — parent index already matches working tree commits
+                    Write-Host " [i] Submodules already at expected commit, no commit needed" -ForegroundColor Cyan
+                    return @{ success = $true; message = "Submodules already in sync" }
                 } else {
-                    # There are changes to commit
                     $null = Run-GitCommand -Arguments "commit", "-m", "Auto-update submodules ($updatedCount updated)" -WorkingDirectory $RepoPath -TimeoutSeconds 10
                     if ($LASTEXITCODE -eq 0) {
                         Write-Host " OK" -ForegroundColor Green
