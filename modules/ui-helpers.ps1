@@ -104,6 +104,20 @@ function Show-Summary {
             if ($repo.hasUncommittedChanges -or $repo.hasUntrackedFiles) {
                 Write-Host "      [~] Note: repo still has local uncommitted changes" -ForegroundColor Yellow
             }
+            # Show branches that were NOT pushed (behind/diverged) so user is aware
+            if ($repo.branches) {
+                $skipped = $repo.branches | Where-Object { $_.behind -gt 0 }
+                if ($skipped) {
+                    Write-Host "      [!] Branches still needing attention:" -ForegroundColor Yellow
+                    foreach ($branch in $skipped) {
+                        if ($branch.ahead -gt 0) {
+                            Write-Host "         $($branch.name): Diverged ($($branch.ahead) ahead, $($branch.behind) behind)" -ForegroundColor Red
+                        } else {
+                            Write-Host "         $($branch.name): $($branch.behind) commits behind" -ForegroundColor Yellow
+                        }
+                    }
+                }
+            }
             Write-Host ""
         }
     }
@@ -217,6 +231,21 @@ function Show-RepoAttention {
     
     if ($Repo.status -eq "dirty") {
         Write-Host "      Status: $($Repo.message) (on branch: $($Repo.currentBranch))" -ForegroundColor Gray
+        # Show per-branch tracking info so user is aware of branches needing attention
+        if ($Repo.branches) {
+            foreach ($branch in $Repo.branches) {
+                if ($branch.ahead -gt 0 -and $branch.behind -gt 0) {
+                    Write-Host "      Branch $($branch.name): Diverged ($($branch.ahead) ahead, $($branch.behind) behind)" -ForegroundColor Red
+                    $hasBranchIssues = $true
+                } elseif ($branch.ahead -gt 0) {
+                    Write-Host "      Branch $($branch.name): $($branch.ahead) commits ahead" -ForegroundColor Blue
+                    $hasBranchIssues = $true
+                } elseif ($branch.behind -gt 0) {
+                    Write-Host "      Branch $($branch.name): $($branch.behind) commits behind" -ForegroundColor Yellow
+                    $hasBranchIssues = $true
+                }
+            }
+        }
     } elseif ($Repo.status -eq "no_remote") {
         Write-Host "      Status: $($Repo.message)" -ForegroundColor Gray
     } elseif ($Repo.status -eq "submodule_updates") {

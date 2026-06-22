@@ -148,7 +148,9 @@ get_repo_status() {
         REPO_MESSAGES[$index]="Has uncommitted changes"
         REPO_CAN_PULL[$index]="false"
         REPO_WAS_DIRTY[$index]="true"
-        if [[ "$any_ahead" -gt 0 && "$any_behind" -eq 0 && "$any_diverged" -eq 0 ]]; then
+        # Branch-level eligibility: push any branch that is strictly ahead.
+        # Unrelated behind/diverged branches do NOT block pushing eligible ahead branches.
+        if [[ "$any_ahead" -gt 0 ]]; then
             REPO_CAN_PUSH[$index]="true"
         fi
     elif [[ "$has_only_submodule_changes" == true ]]; then
@@ -161,7 +163,8 @@ get_repo_status() {
             REPO_MESSAGES[$index]="Has submodule changes"
             REPO_CAN_PULL[$index]="false"
         fi
-    elif [[ "$any_diverged" -gt 0 ]]; then
+    elif [[ "$any_diverged" -gt 0 && "$any_behind" -eq 0 && "$any_ahead" -eq 0 ]]; then
+        # Only diverged branches, nothing else actionable
         REPO_STATUSES[$index]="diverged"
         REPO_MESSAGES[$index]="Some branches diverged"
         REPO_CAN_PULL[$index]="false"
@@ -169,13 +172,15 @@ get_repo_status() {
         REPO_STATUSES[$index]="behind"
         REPO_MESSAGES[$index]="$any_behind branch(es) behind"
         REPO_CAN_PULL[$index]="true"
+        # Branch-level: also allow pushing other branches that are strictly ahead
+        if [[ "$any_ahead" -gt 0 ]]; then
+            REPO_CAN_PUSH[$index]="true"
+        fi
     elif [[ "$any_ahead" -gt 0 ]]; then
         REPO_STATUSES[$index]="ahead"
         REPO_MESSAGES[$index]="$any_ahead branch(es) ahead"
         REPO_CAN_PULL[$index]="false"
-        if [[ "$any_behind" -eq 0 ]]; then
-            REPO_CAN_PUSH[$index]="true"
-        fi
+        REPO_CAN_PUSH[$index]="true"
     else
         # Clean and up to date — run submodule check as final pass.
         check_submodules "$repo_path" "$index"

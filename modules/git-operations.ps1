@@ -252,10 +252,10 @@ function Get-RepoStatus {
             } else {
                 $result.message = "Has untracked files"
             }
-            $anyBehindDirty   = $result.branches | Where-Object { $_.behind -gt 0 }
-            $anyAheadDirty    = $result.branches | Where-Object { $_.ahead  -gt 0 }
-            $anyDivergedDirty = $result.branches | Where-Object { $_.ahead  -gt 0 -and $_.behind -gt 0 }
-            if ($anyAheadDirty -and -not $anyDivergedDirty -and -not $anyBehindDirty) {
+            # Branch-level eligibility: push any branch that is strictly ahead (behind==0).
+            # Unrelated behind branches do NOT block pushing eligible ahead branches.
+            $eligiblePush = $result.branches | Where-Object { $_.ahead -gt 0 -and $_.behind -eq 0 }
+            if ($eligiblePush) {
                 $result.canPush = $true
             }
         } elseif ($hasOnlySubmoduleChanges) {
@@ -271,23 +271,33 @@ function Get-RepoStatus {
             }
         } else {
             # Clean working tree — evaluate branch tracking fully.
-            $anyBehind  = $result.branches | Where-Object { $_.behind -gt 0 }
-            $anyAhead   = $result.branches | Where-Object { $_.ahead  -gt 0 }
-            $anyDiverged = $result.branches | Where-Object { $_.ahead  -gt 0 -and $_.behind -gt 0 }
+            # Use mutually exclusive sets to avoid diverged branches appearing in both behind/ahead.
+            $strictlyBehind = $result.branches | Where-Object { $_.behind -gt 0 -and $_.ahead -eq 0 }
+            $strictlyAhead  = $result.branches | Where-Object { $_.ahead  -gt 0 -and $_.behind -eq 0 }
+            $diverged       = $result.branches | Where-Object { $_.ahead  -gt 0 -and $_.behind -gt 0 }
 
-            if ($anyDiverged) {
+            # Set canPull if any branch is strictly behind (safe to fast-forward)
+            if ($strictlyBehind) {
+                $result.canPull = $true
+            }
+            # Set canPush if any branch is strictly ahead (safe to push)
+            if ($strictlyAhead) {
+                $result.canPush = $true
+            }
+
+            # Determine primary status for display
+            if ($diverged -and -not $strictlyBehind -and -not $strictlyAhead) {
                 $result.status = "diverged"
                 $result.message = "Some branches have diverged"
-            } elseif ($anyBehind) {
+            } elseif ($strictlyBehind -and $strictlyAhead) {
                 $result.status = "behind"
-                $result.message = "$($anyBehind.Count) branch(es) behind"
-                $result.canPull = $true
-            } elseif ($anyAhead) {
+                $result.message = "$(@($strictlyBehind).Count) behind, $(@($strictlyAhead).Count) ahead"
+            } elseif ($strictlyBehind) {
+                $result.status = "behind"
+                $result.message = "$(@($strictlyBehind).Count) branch(es) behind"
+            } elseif ($strictlyAhead) {
                 $result.status = "ahead"
-                $result.message = "$($anyAhead.Count) branch(es) ahead"
-                if (-not $anyBehind) {
-                    $result.canPush = $true
-                }
+                $result.message = "$(@($strictlyAhead).Count) branch(es) ahead"
             } else {
                 # Truly up to date — check submodules as a final pass.
                 $submoduleCheck = Test-SubmoduleUpdates -RepoPath $RepoPath

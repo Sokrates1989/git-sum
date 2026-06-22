@@ -82,6 +82,28 @@ show_summary() {
                 if [[ "${REPO_WAS_DIRTY[$i]:-false}" == "true" ]]; then
                     echo "      [~] Note: repo still has local uncommitted changes"
                 fi
+                # Show branches that were NOT pushed (behind/diverged) so user is aware
+                cd "${REPO_PATHS[$i]}" 2>/dev/null && {
+                    local has_skipped=false
+                    while IFS='|' read -r branch upstream; do
+                        [[ -z "$branch" || -z "$upstream" ]] && continue
+                        local behind_count
+                        behind_count=$(run_git_command rev-list --count "$branch..$upstream" 2>/dev/null || echo 0)
+                        if [[ "$behind_count" -gt 0 ]]; then
+                            if [[ "$has_skipped" == false ]]; then
+                                echo "      [!] Branches still needing attention:"
+                                has_skipped=true
+                            fi
+                            local ahead_count
+                            ahead_count=$(run_git_command rev-list --count "$upstream..$branch" 2>/dev/null || echo 0)
+                            if [[ "$ahead_count" -gt 0 ]]; then
+                                echo -e "         $branch: \033[0;31mDiverged ($ahead_count ahead, $behind_count behind)\033[0m"
+                            else
+                                echo -e "         $branch: \033[0;33m$behind_count commits behind\033[0m"
+                            fi
+                        fi
+                    done < <(run_git_command branch --format="%(refname:short)|%(upstream:short)" 2>/dev/null)
+                }
                 echo ""
             fi
         done
@@ -166,6 +188,25 @@ show_repo_attention() {
     
     if [[ "$status" == "dirty" ]]; then
         echo "      Status: ${REPO_MESSAGES[$index]} (on branch: ${REPO_BRANCHES[$index]})"
+        # Show per-branch tracking info so user is aware of branches needing attention
+        cd "${REPO_PATHS[$index]}" 2>/dev/null && {
+            while IFS='|' read -r branch upstream; do
+                [[ -z "$branch" || -z "$upstream" ]] && continue
+                local ahead behind
+                ahead=$(run_git_command rev-list --count "$upstream..$branch" 2>/dev/null || echo 0)
+                behind=$(run_git_command rev-list --count "$branch..$upstream" 2>/dev/null || echo 0)
+                if [[ "$ahead" -gt 0 ]] && [[ "$behind" -gt 0 ]]; then
+                    echo -e "      Branch $branch: \033[0;31mDiverged ($ahead ahead, $behind behind)\033[0m"
+                    has_branch_issues=true
+                elif [[ "$ahead" -gt 0 ]]; then
+                    echo -e "      Branch $branch: \033[0;34m$ahead commits ahead\033[0m"
+                    has_branch_issues=true
+                elif [[ "$behind" -gt 0 ]]; then
+                    echo -e "      Branch $branch: \033[0;33m$behind commits behind\033[0m"
+                    has_branch_issues=true
+                fi
+            done < <(run_git_command branch --format="%(refname:short)|%(upstream:short)" 2>/dev/null)
+        }
     elif [[ "$status" == "no_remote" ]]; then
         echo "      Status: ${REPO_MESSAGES[$index]}"
     elif [[ "$status" == "error" ]]; then
