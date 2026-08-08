@@ -629,10 +629,11 @@ function Invoke-RepoScan {
                         $submoduleResult = Update-Submodules -RepoPath $repoPath -RepoName $status.name
                         Set-RepoStatusField -Status $status -Name "pullResult" -Value $submoduleResult
                         
+                        Set-SubmoduleUpdateClassification -Status $status -Result $submoduleResult
+
                         if ($submoduleResult.success) {
-                            Write-Host " $($submoduleResult.message)" -ForegroundColor Green
-                            Set-RepoStatusField -Status $status -Name "status" -Value "pulled"
-                            Set-RepoStatusField -Status $status -Name "message" -Value $submoduleResult.message
+                            $resultColor = if ($submoduleResult.changed) { "Green" } else { "Gray" }
+                            Write-Host " $($submoduleResult.message)" -ForegroundColor $resultColor
                         } else {
                             Write-Host " Failed" -ForegroundColor Red
                         }
@@ -827,6 +828,35 @@ function Test-SubmoduleUpdates {
     return $result
 }
 
+function Set-SubmoduleUpdateClassification {
+    <#
+    .SYNOPSIS
+        Maps a submodule operation result to the parent repository summary.
+    .PARAMETER Status
+        Mutable repository status object or hashtable.
+    .PARAMETER Result
+        Hashtable containing success, changed, and message fields.
+    .OUTPUTS
+        None. The supplied status object is updated in place.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        $Status,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Result
+    )
+
+    Set-RepoStatusField -Status $Status -Name "message" -Value $Result.message
+    if (-not $Result.success) {
+        Set-RepoStatusField -Status $Status -Name "status" -Value "submodule_updates"
+    } elseif ($Result.changed) {
+        Set-RepoStatusField -Status $Status -Name "status" -Value "pulled"
+    } else {
+        Set-RepoStatusField -Status $Status -Name "status" -Value "up_to_date"
+    }
+}
+
 function Update-Submodules {
     <#
     .SYNOPSIS
@@ -836,7 +866,8 @@ function Update-Submodules {
     .PARAMETER RepoName
         Name of the repository for display
     .RETURNS
-        Object with success and message properties
+        Hashtable with success, changed, and message properties. Changed is
+        true only when the parent repository receives a new pointer commit.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -879,7 +910,7 @@ function Update-Submodules {
         
         if ($allSubmodules.Count -eq 0) {
             Write-Host "   [i] No submodule updates needed" -ForegroundColor Gray
-            return @{ success = $true; message = "No submodule updates needed" }
+            return @{ success = $true; changed = $false; message = "No submodule updates needed" }
         }
         
         $updatedCount = 0
@@ -923,32 +954,32 @@ function Update-Submodules {
                 if ($LASTEXITCODE -eq 0) {
                     # Nothing staged — parent index already matches working tree commits
                     Write-Host " [i] Submodules already at expected commit, no commit needed" -ForegroundColor Cyan
-                    return @{ success = $true; message = "Submodules already in sync" }
+                    return @{ success = $true; changed = $false; message = "Submodules already in sync" }
                 } else {
                     $null = Run-GitCommand -Arguments "commit", "-m", "Auto-update submodules ($updatedCount updated)" -WorkingDirectory $RepoPath -TimeoutSeconds 10
                     if ($LASTEXITCODE -eq 0) {
                         Write-Host " OK" -ForegroundColor Green
                     } else {
                         Write-Host " FAILED" -ForegroundColor Red
-                        return @{ success = $false; message = "Failed to commit submodule updates" }
+                        return @{ success = $false; changed = $false; message = "Failed to commit submodule updates" }
                     }
                 }
                 Write-Host ""
                 Write-Host "[!] IMPORTANT: Submodules were automatically updated!" -ForegroundColor Yellow
                 Write-Host "   Please test $RepoName to ensure it still works as expected" -ForegroundColor Yellow
                 Write-Host "   Review the submodule changes: git log --oneline -5" -ForegroundColor Yellow
-                return @{ success = $true; message = "Updated $updatedCount submodule(s)" }
+                return @{ success = $true; changed = $true; message = "Updated $updatedCount submodule(s)" }
             } catch {
                 Write-Host " FAILED" -ForegroundColor Red
-                return @{ success = $false; message = "Failed to commit submodule updates" }
+                return @{ success = $false; changed = $false; message = "Failed to commit submodule updates" }
             }
         }
         
-        return @{ success = $true; message = "No submodule updates were needed" }
+        return @{ success = $true; changed = $false; message = "No submodule updates were needed" }
         
     } catch {
         $errorMessage = $_.Exception.Message
         Write-Host ("   Error updating submodules: " + $errorMessage) -ForegroundColor Red
-        return @{ success = $false; message = ('Error updating submodules: ' + $errorMessage) }
+        return @{ success = $false; changed = $false; message = ('Error updating submodules: ' + $errorMessage) }
     }
 }

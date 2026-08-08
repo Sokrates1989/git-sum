@@ -17,6 +17,8 @@ declare -a REPO_CAN_PUSH
 declare -a REPO_WAS_DIRTY
 declare -a REPO_HAS_SUBMODULES
 declare -a REPO_ORIGINAL_BRANCHES  # Store original branch for auto-pull/auto-push
+SUBMODULE_UPDATE_CHANGED=false
+SUBMODULE_UPDATE_MESSAGE=""
 
 # Reset results arrays
 reset_results() {
@@ -391,16 +393,17 @@ do_safe_pull() {
         run_git_command checkout "$original_branch" --quiet
     fi
     
-    # Check and update submodules if this was a submodule update repo
+    # Check and update submodules if this was a submodule update repo.
     if [[ "${REPO_STATUSES[$index]}" == "submodule_updates" ]]; then
         local repo_name="${REPO_NAMES[$index]}"
         if update_submodules "$repo_path" "$repo_name"; then
-            REPO_STATUSES[$index]="pulled"
-            REPO_MESSAGES[$index]="Updated submodules"
+            set_submodule_update_classification \
+                "$index" true "$SUBMODULE_UPDATE_CHANGED" \
+                "$SUBMODULE_UPDATE_MESSAGE"
             return 0
         else
-            REPO_STATUSES[$index]="submodule_updates"
-            REPO_MESSAGES[$index]="Failed to update submodules"
+            set_submodule_update_classification \
+                "$index" false false "$SUBMODULE_UPDATE_MESSAGE"
             return 1
         fi
     fi
@@ -549,10 +552,47 @@ check_submodules() {
     return 0
 }
 
-# Update submodules safely
+# Classify one submodule update result for the final repository summary.
+#
+# Args:
+#   $1: Repository result-array index.
+#   $2: true when submodule processing succeeded.
+#   $3: true only when a parent pointer commit was created.
+#   $4: Human-readable result message.
+#
+# Returns:
+#   0 after updating the repository status arrays.
+set_submodule_update_classification() {
+    local index="$1"
+    local succeeded="$2"
+    local changed="$3"
+    local message="$4"
+
+    REPO_MESSAGES[$index]="$message"
+    if [[ "$succeeded" != true ]]; then
+        REPO_STATUSES[$index]="submodule_updates"
+    elif [[ "$changed" == true ]]; then
+        REPO_STATUSES[$index]="pulled"
+    else
+        REPO_STATUSES[$index]="up_to_date"
+    fi
+}
+
+# Update submodules safely and expose whether the parent repository changed.
+#
+# Args:
+#   $1: Parent repository path.
+#   $2: Parent repository display name.
+#
+# Returns:
+#   0 for successful update/no-op; otherwise 1. Sets SUBMODULE_UPDATE_CHANGED
+#   only when a parent pointer commit was created, plus a summary message.
 update_submodules() {
     local repo_path=$1
     local repo_name=$2
+
+    SUBMODULE_UPDATE_CHANGED=false
+    SUBMODULE_UPDATE_MESSAGE="No submodule updates needed"
     
     echo ""
     echo "📦 Updating submodules in $repo_name..."
@@ -582,6 +622,7 @@ update_submodules() {
 
     if [[ "${#all_submodules[@]}" -eq 0 ]]; then
         echo "   ℹ️  No submodule updates needed"
+        SUBMODULE_UPDATE_MESSAGE="No submodule updates needed"
         return 0
     fi
     
@@ -616,12 +657,16 @@ update_submodules() {
         if run_git_command -C "$repo_path" diff --cached --quiet &>/dev/null; then
             # Nothing staged — parent index already matches working tree commits
             echo "   ℹ️  Submodules already at expected commit, no commit needed"
+            SUBMODULE_UPDATE_MESSAGE="Submodules already in sync"
             return 0
         else
             if run_git_command -C "$repo_path" commit -m "Auto-update submodules ($updated_count updated)" &>/dev/null; then
                 echo "   ✅ Committed submodule updates"
+                SUBMODULE_UPDATE_CHANGED=true
+                SUBMODULE_UPDATE_MESSAGE="Updated $updated_count submodule(s)"
             else
                 echo "   ❌ Failed to commit submodule updates"
+                SUBMODULE_UPDATE_MESSAGE="Failed to commit submodule updates"
                 return 1
             fi
         fi
