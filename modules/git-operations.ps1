@@ -570,6 +570,9 @@ function Invoke-RepoScan {
     <#
     .SYNOPSIS
         Scans all configured folders for git repos and checks their status
+    .DESCRIPTION
+        Treats each configured path as either a repository or a container of
+        first-level repositories, and scans each resolved repository once.
     .PARAMETER DryRun
         If true, don't pull - just show status
     .PARAMETER TestLimit
@@ -584,6 +587,7 @@ function Invoke-RepoScan {
     
     $config = Get-WatchedFolders
     $allResults = @()
+    $scannedRepoPaths = @{}
     
     foreach ($folder in $config.folders) {
         if (-not (Test-Path $folder)) {
@@ -593,18 +597,26 @@ function Invoke-RepoScan {
         
         Write-Host "[>] Scanning: $folder" -ForegroundColor Cyan
         
-        # Get first-level subdirectories
-        $subDirs = Get-ChildItem -Path $folder -Directory -ErrorAction SilentlyContinue
+        $repoCandidates = @()
+        if (Test-Path -LiteralPath (Join-Path $folder ".git")) {
+            $repoCandidates = @(Get-Item -LiteralPath $folder)
+        } else {
+            $repoCandidates = @(
+                Get-ChildItem -LiteralPath $folder -Directory -ErrorAction SilentlyContinue |
+                    Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName ".git") }
+            )
+        }
         
-        foreach ($subDir in $subDirs) {
-            $repoPath = $subDir.FullName
-            
-            # Check if it's a git repo
-            if (-not (Test-Path (Join-Path $repoPath ".git"))) {
+        foreach ($repoCandidate in $repoCandidates) {
+            $repoPath = $repoCandidate.FullName
+            $normalizedRepoPath = [System.IO.Path]::GetFullPath($repoPath)
+
+            if ($scannedRepoPaths.ContainsKey($normalizedRepoPath)) {
                 continue
             }
-            
-            Write-Host "   [?] Checking: $($subDir.Name)..." -ForegroundColor Gray -NoNewline
+            $scannedRepoPaths[$normalizedRepoPath] = $true
+
+            Write-Host "   [?] Checking: $($repoCandidate.Name)..." -ForegroundColor Gray -NoNewline
             
             $status = Get-RepoStatus -RepoPath $repoPath
             

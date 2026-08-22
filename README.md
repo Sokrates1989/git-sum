@@ -171,7 +171,7 @@ Configuration is stored in `config/watched-folders.json`:
 
 ## 🔧 How It Works
 
-1. **Scans** first-level subdirectories of configured folders for `.git` directories
+1. **Scans** each configured path as either a git repository or a folder whose first-level subdirectories are git repositories
 2. **Fetches** remote changes (quiet, in background)
 3. **Analyzes** each repo's state:
    - Current branch

@@ -435,10 +435,52 @@ get_status_icon() {
     esac
 }
 
+# Emit repositories represented by a watched path as NUL-delimited paths.
+#
+# A watched path may be a repository itself or a container whose first-level
+# directories are repositories. Git worktrees with a `.git` file are accepted
+# alongside regular repositories with a `.git` directory.
+#
+# Args:
+#   $1 - watched_path: Existing repository or container directory.
+#
+# Outputs:
+#   NUL-delimited repository paths on standard output.
+get_repository_candidates() {
+    local watched_path=$1
+
+    if [[ -d "$watched_path/.git" || -f "$watched_path/.git" ]]; then
+        printf '%s\0' "$watched_path"
+        return 0
+    fi
+
+    local found_child=false
+    local child_path
+    for child_path in "$watched_path"/*/; do
+        [[ -d "$child_path" ]] || continue
+        found_child=true
+        child_path=${child_path%/}
+        if [[ -d "$child_path/.git" || -f "$child_path/.git" ]]; then
+            printf '%s\0' "$child_path"
+        fi
+    done
+
+    # A failed glob is indistinguishable from an empty folder in Bash. Retry
+    # through find so transient directory-enumeration failures are not silent.
+    if [[ "$found_child" == false ]]; then
+        while IFS= read -r -d '' child_path; do
+            if [[ -d "$child_path/.git" || -f "$child_path/.git" ]]; then
+                printf '%s\0' "$child_path"
+            fi
+        done < <(find "$watched_path" -mindepth 1 -maxdepth 1 -type d -print0)
+    fi
+}
+
 # Scan all repos
 run_repo_scan() {
     local dry_run=${1:-false}
     local test_limit=${2:-0}
+    local -a scanned_repo_paths=()
     
     reset_results
     
@@ -452,17 +494,22 @@ run_repo_scan() {
         
         echo "[>] Scanning: $folder"
         
-        # Get first-level subdirectories
-        for subdir in "$folder"/*/; do
-            [[ ! -d "$subdir" ]] && continue
-            
-            local repo_path="${subdir%/}"
-            
-            # Check if it's a git repo
-            if [[ ! -d "$repo_path/.git" ]]; then
+        local repo_path
+        while IFS= read -r -d '' repo_path; do
+            local already_scanned=false
+            local scanned_repo_path
+            for scanned_repo_path in ${scanned_repo_paths[@]+"${scanned_repo_paths[@]}"}; do
+                if [[ "$scanned_repo_path" == "$repo_path" ]]; then
+                    already_scanned=true
+                    break
+                fi
+            done
+
+            if [[ "$already_scanned" == true ]]; then
                 continue
             fi
-            
+            scanned_repo_paths+=("$repo_path")
+
             local repo_name
             repo_name=$(basename "$repo_path")
             
@@ -503,7 +550,7 @@ run_repo_scan() {
                 echo "[i] Test limit reached: checked $test_limit repositories"
                 break
             fi
-        done
+        done < <(get_repository_candidates "$folder")
         
         # Check test limit after each folder
         if [[ "$test_limit" -gt 0 && "${#REPO_NAMES[@]}" -ge "$test_limit" ]]; then
